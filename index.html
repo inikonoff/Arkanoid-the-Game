@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <link rel="manifest" href="./manifest.json">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>HAVOC ARKANOID: 3D KINETIC VOID</title>
@@ -1219,44 +1220,18 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
-
-    // --- Dynamic PWA Manifest and Service Worker Generator ---
-    (function setupPWA() {
-      const manifest = {
-        name: "Havoc Arkanoid 3D",
-        short_name: "Havoc3D",
-        start_url: ".",
-        display: "standalone",
-        background_color: "#05070a",
-        theme_color: "#00f0ff",
-        icons: [{
-          src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2300f0ff'/><rect x='20' y='75' width='60' height='12' rx='6' fill='%23ffffff'/></svg>",
-          sizes: "192x192 512x512",
-          type: "image/svg+xml"
-        }]
-      };
-      const stringManifest = JSON.stringify(manifest);
-      const blob = new Blob([stringManifest], { type: 'application/json' });
-      const manifestURL = URL.createObjectURL(blob);
-      const link = document.createElement('link');
-      link.rel = 'manifest';
-      link.href = manifestURL;
-      document.head.appendChild(link);
-
-      // Register inline Service Worker
-      if ('serviceWorker' in navigator) {
-        const swCode = `
-          const CACHE = 'havoc-v1';
-          self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
-          self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-          self.addEventListener('fetch', e => {
-            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    // --- PWA Service Worker Registration ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('✅ Service Worker успешно подключен! Область:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('⚠️ Ошибка при регистрации Service Worker:', err);
           });
-        `;
-        const swBlob = new Blob([swCode], { type: 'text/javascript' });
-        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
-      }
-    })();
+      });
+    }
   </script>
 </body>
 </html>
