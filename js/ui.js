@@ -138,7 +138,7 @@ export class UI {
     items.push({ lbl: 'Генератор', meta: '∞ УРОВНЕЙ', act: () => this.show('generator') });
     items.push({ lbl: 'Бесконечный', meta: 'ВЫЖИВАНИЕ', act: () => this.app.playEndless() });
     if (profile.chaosUnlocked) items.push({ lbl: 'Режим хаоса', meta: `<b>${profile.chaosMode ? 'ВКЛ' : 'ВЫКЛ'}</b>`, toggle: true, act: () => { profile.chaosMode = !profile.chaosMode; saveProfile(); this.buildMenu(); } });
-    items.push({ lbl: 'Настройки', meta: (settings.preset || '').toUpperCase(), act: () => this.show('settings') });
+    items.push({ lbl: 'Настройки', meta: ({ auto: 'АВТО', ultra: 'УЛЬТРА', high: 'ВЫСОКО', medium: 'СРЕДНЕ', low: 'НИЗКО', potato: 'КАРТОШКА', custom: 'СВОЁ' })[settings.preset] || 'СВОЁ', act: () => this.show('settings') });
     items.push({ lbl: 'Как играть', meta: 'МАНУАЛ', act: () => this.show('help') });
     items.forEach((it, i) => {
       const b = el('button', 'menu-item' + (it.primary ? ' primary' : '') + (it.toggle ? ' opt' : ''),
