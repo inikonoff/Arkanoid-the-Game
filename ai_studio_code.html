@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HAVOC ARKANOID: 3D KINETIC VOID</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+      touch-action: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #05070a;
+      font-family: 'Segoe UI', Roboto, -apple-system, sans-serif;
+      color: #fff;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    /* UI Overlay */
+    #ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+    }
+    .interactive {
+      pointer-events: auto;
+    }
+    .hud-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(13, 17, 23, 0.7);
+      backdrop-filter: blur(10px);
+      padding: 10px 20px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .hud-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      background: linear-gradient(45deg, #00f0ff, #ff007b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hud-stats {
+      display: flex;
+      gap: 15px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .hud-stat-val {
+      color: #00f0ff;
+    }
+    /* Boss Health Bar */
+    #boss-hud {
+      display: none;
+      position: absolute;
+      top: 75px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(80%, 450px);
+      background: rgba(0,0,0,0.8);
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid #ff0055;
+      box-shadow: 0 0 20px rgba(255, 0, 85, 0.4);
+      text-align: center;
+    }
+    #boss-name {
+      font-size: 0.8rem;
+      letter-spacing: 1.5px;
+      color: #ff3366;
+      margin-bottom: 4px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .boss-bar-bg {
+      width: 100%;
+      height: 12px;
+      background: #20050e;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    #boss-bar-fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff9900, #ff0055);
+      transition: width 0.2s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    /* Weather Alert */
+    #weather-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    /* Center Dialogs / Modals */
+    .overlay-screen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(10, 14, 22, 0.92);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      padding: 24px;
+      border-radius: 20px;
+      text-align: center;
+      max-width: 90%;
+      width: 420px;
+      box-shadow: 0 0 50px rgba(0, 240, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .btn {
+      background: linear-gradient(135deg, #00f0ff, #0077fe);
+      border: none;
+      color: #030a16;
+      font-weight: 800;
+      padding: 12px 20px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+    .btn:active {
+      transform: scale(0.96);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    select, input {
+      background: #141b26;
+      border: 1px solid #00f0ff55;
+      padding: 10px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    /* Mobile Touch Buttons */
+    .mobile-controls {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      padding-bottom: 10px;
+    }
+    .touch-btn {
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+    }
+    .touch-btn:active {
+      background: rgba(0, 240, 255, 0.4);
+    }
+  </style>
+
+  <!-- Polyfills / Libs via CDN -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <div id="ui-layer">
+    <div class="hud-header interactive">
+      <div class="hud-title">HAVOC 3D</div>
+      <div id="weather-badge">🌤️ Штиль</div>
+      <div class="hud-stats">
+        <div>LVL: <span id="hud-level" class="hud-stat-val">1</span></div>
+        <div>HP: <span id="hud-lives" class="hud-stat-val">❤❤❤</span></div>
+        <div>СЧЁТ: <span id="hud-score" class="hud-stat-val">0</span></div>
+      </div>
+      <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;" id="btn-menu">МЕНЮ</button>
+    </div>
+
+    <!-- Boss Health Bar -->
+    <div id="boss-hud">
+      <div id="boss-name">ТИП: ДРЕВНИЙ СТРАЖ</div>
+      <div class="boss-bar-bg">
+        <div id="boss-bar-fill"></div>
+      </div>
+    </div>
+
+    <!-- Mobile Action Bar -->
+    <div class="mobile-controls interactive">
+      <button class="touch-btn" id="btn-fire" title="Огонь орудий">🔥</button>
+      <button class="touch-btn" id="btn-launch" title="Запуск шара">🚀</button>
+    </div>
+  </div>
+
+  <!-- Modal: Generator / Menu -->
+  <div id="modal-menu" class="overlay-screen interactive" style="display: none; z-index: 20;">
+    <h2 style="color: #00f0ff; letter-spacing: 2px;">ГЕНЕРАТОР УРОВНЕЙ</h2>
+    <label style="text-align:left; font-size: 0.85rem;">Шаблон генерации:</label>
+    <select id="gen-preset">
+      <option value="classic">Классическая сетка (Retro Arcade)</option>
+      <option value="pyramid">Великая Пирамида (Desert Temple)</option>
+      <option value="megastructure">Мегаструктура (Гигантский 15x10)</option>
+      <option value="spiral">Спиральный Вихрь (Chaos Kinetic)</option>
+      <option value="chaos">Сумасшедший Хаос (Взрывной микс)</option>
+    </select>
+    
+    <label style="text-align:left; font-size: 0.85rem;">Локация и погода:</label>
+    <select id="gen-theme">
+      <option value="desert">🏜️ Дюны Забвения (Буря, Снос ветра)</option>
+      <option value="space">🌌 Бездна Космоса (Невесомость 0.2G)</option>
+      <option value="cyber">⚡ Неоновый Шторм (Скольжение и импульсы)</option>
+      <option value="lava">🌋 Магматический Разлом (Термо-толчки)</option>
+    </select>
+
+    <div style="display: flex; gap: 10px; margin-top: 10px;">
+      <button class="btn" id="btn-gen-start" style="flex: 1;">СОЗДАТЬ</button>
+      <button class="btn btn-secondary" id="btn-menu-close">НАЗАД</button>
+    </div>
+  </div>
+
+  <!-- Modal: Start / Game Over -->
+  <div id="modal-start" class="overlay-screen interactive" style="z-index: 20;">
+    <h1 style="background: linear-gradient(45deg, #00f0ff, #ff007b); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">HAVOC ARKANOID</h1>
+    <p style="font-size: 0.85rem; color: #a0aec0;">Реалистичная физика соударений, кинетические взрывы, боссы и погодные аномалии.</p>
+    <div style="font-size: 0.8rem; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px;">
+      💻 <b>Мышь / Тач:</b> Движение платформы<br>
+      🚀 <b>Клик / Тап / Пробел:</b> Запуск & Лазерный огонь
+    </div>
+    <button class="btn" id="btn-play">В БОЙ</button>
+  </div>
+
+  <!-- Main Game Script -->
+  <script type="module">
+    import * as THREE from 'three';
+    import * as CANNON from 'cannon-es';
+
+    // --- Audio Synthesizer (Procedural Web Audio) ---
+    class SoundFX {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+      }
+      playTone(freq, type = 'sine', duration = 0.1, decay = 0.1) {
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + duration);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + decay);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch(e){}
+      }
+      bounce() { this.playTone(320 + Math.random() * 80, 'triangle', 0.08, 0.08); }
+      laser() { this.playTone(900, 'sawtooth', 0.12, 0.1); }
+      powerup() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(900, now + 0.2);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(); osc.stop(now + 0.2);
+      }
+      explode() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 0.35);
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(); osc.stop(now + 0.35);
+      }
+    }
+    const audio = new SoundFX();
+
+    // --- Global Game State ---
+    const STATE = {
+      level: 1,
+      score: 0,
+      lives: 3,
+      running: false,
+      ballAttached: true,
+      lasersActive: false,
+      laserTimer: 0,
+      shieldActive: false,
+      currentTheme: 'desert',
+      weatherForce: new CANNON.Vec3(0, 0, 0),
+      boss: null,
+      paddleWidth: 4.5
+    };
+
+    const ARENA = { width: 22, height: 32, depth: 3 };
+
+    // --- Three.js & Cannon.js Setup ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x05070a, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 150);
+    // Dynamic cinematic camera positioned behind and above the paddle
+    camera.position.set(0, -22, 24);
+    camera.lookAt(0, 2, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    container.appendChild(renderer.domElement);
+
+    // Physics World
+    const world = new CANNON.World();
+    world.gravity.set(0, -9.8, 0);
+    world.defaultContactMaterial.friction = 0.05;
+    world.defaultContactMaterial.restitution = 1.0; // high kinetic bounce
+
+    // Materials
+    const ballPhysicsMat = new CANNON.Material('ball');
+    const wallPhysicsMat = new CANNON.Material('wall');
+    const paddlePhysicsMat = new CANNON.Material('paddle');
+
+    world.addContactMaterial(new CANNON.ContactMaterial(ballPhysicsMat, wallPhysicsMat, { restitution: 1.0, friction: 0 }));
+    world.addContactMaterial(new CANNON.ContactMaterial(ballPhysicsMat, paddlePhysicsMat, { restitution: 1.05, friction: 0.1 }));
+
+    // Lighting
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x111122, 0.8);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    dirLight.position.set(10, -10, 25);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    scene.add(dirLight);
+
+    const ambientGlow = new THREE.PointLight(0x00f0ff, 2, 40);
+    ambientGlow.position.set(0, 0, 10);
+    scene.add(ambientGlow);
+
+    // --- Walls and Boundaries ---
+    function createBoundaries() {
+      const halfW = ARENA.width / 2;
+      const halfH = ARENA.height / 2;
+
+      const walls = [
+        { size: [0.6, ARENA.height, 3], pos: [-halfW, 0, 0] }, // left
+        { size: [0.6, ARENA.height, 3], pos: [halfW, 0, 0] },  // right
+        { size: [ARENA.width, 0.6, 3], pos: [0, halfH, 0] },   // top
+      ];
+
+      walls.forEach(w => {
+        const shape = new CANNON.Box(new CANNON.Vec3(w.size[0]/2, w.size[1]/2, w.size[2]/2));
+        const body = new CANNON.Body({ mass: 0, material: wallPhysicsMat });
+        body.addShape(shape);
+        body.position.set(...w.pos);
+        world.addBody(body);
+
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(...w.size),
+          new THREE.MeshStandardMaterial({
+            color: 0x1a2634,
+            metalness: 0.8,
+            roughness: 0.2,
+            emissive: 0x002b47,
+            emissiveIntensity: 0.3
+          })
+        );
+        mesh.position.set(...w.pos);
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+      });
+
+      // Bottom death floor plane
+      const groundGeo = new THREE.PlaneGeometry(ARENA.width * 2, ARENA.height * 1.5);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x070a0e, roughness: 0.6, metalness: 0.4 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.position.z = -1.5;
+      ground.receiveShadow = true;
+      scene.add(ground);
+    }
+    createBoundaries();
+
+    // --- Paddle ---
+    const paddleGeo = new THREE.BoxGeometry(STATE.paddleWidth, 0.9, 1.2);
+    const paddleMat = new THREE.MeshStandardMaterial({
+      color: 0x00f0ff,
+      metalness: 0.7,
+      roughness: 0.2,
+      emissive: 0x0088aa,
+      emissiveIntensity: 0.5
+    });
+    const paddleMesh = new THREE.Mesh(paddleGeo, paddleMat);
+    paddleMesh.castShadow = true;
+    scene.add(paddleMesh);
+
+    const paddleShape = new CANNON.Box(new CANNON.Vec3(STATE.paddleWidth/2, 0.45, 0.6));
+    const paddleBody = new CANNON.Body({ mass: 0, material: paddlePhysicsMat, type: CANNON.Body.KINEMATIC });
+    paddleBody.addShape(paddleShape);
+    paddleBody.position.set(0, -ARENA.height/2 + 2.5, 0);
+    world.addBody(paddleBody);
+
+    // --- Balls & Objects Storage ---
+    const balls = [];
+    const bricks = [];
+    const debrisList = [];
+    const powerUps = [];
+    const lasers = [];
+
+    function spawnBall(x = 0, y = -12, z = 0, isExtra = false) {
+      const radius = 0.45;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(radius, 32, 32),
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          emissive: 0x00f0ff,
+          emissiveIntensity: 0.8,
+          metalness: 0.9,
+          roughness: 0.1
+        })
+      );
+      mesh.castShadow = true;
+      scene.add(mesh);
+
+      const shape = new CANNON.Sphere(radius);
+      const body = new CANNON.Body({
+        mass: 1.0,
+        material: ballPhysicsMat,
+        linearDamping: 0,
+        angularDamping: 0.05
+      });
+      body.addShape(shape);
+      body.position.set(x, y, z);
+      world.addBody(body);
+
+      const ballObj = { mesh, body, isSuper: false };
+      balls.push(ballObj);
+
+      if (!isExtra && STATE.ballAttached) {
+        body.velocity.set(0, 0, 0);
+      } else {
+        const speed = 19;
+        const angle = (Math.random() - 0.5) * 0.8 + Math.PI / 2;
+        body.velocity.set(Math.cos(angle) * speed, Math.sin(angle) * speed, 0);
+      }
+      return ballObj;
+    }
+
+    // --- Dynamic Physical Explosion (Havok-Style Debris) ---
+    function triggerKineticExplosion(pos, radius = 5, strength = 35) {
+      audio.explode();
+
+      // Camera kinetic impulse shake
+      cameraShake = 0.4;
+
+      // Radial impulse on all physics bodies nearby
+      world.bodies.forEach(b => {
+        if (b.mass > 0) {
+          const delta = b.position.vsub(pos);
+          const dist = delta.length();
+          if (dist < radius && dist > 0.01) {
+            delta.normalize();
+            const impulse = delta.scale((1 - dist / radius) * strength);
+            b.applyImpulse(impulse, b.position);
+          }
+        }
+      });
+
+      // Spawn bright visual blast wave
+      const blastGeo = new THREE.RingGeometry(0.2, 1.2, 32);
+      const blastMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+      const blastMesh = new THREE.Mesh(blastGeo, blastMat);
+      blastMesh.position.copy(pos);
+      scene.add(blastMesh);
+
+      const startTime = performance.now();
+      function animBlast() {
+        const elapsed = (performance.now() - startTime) / 1000;
+        if (elapsed < 0.4) {
+          const scale = 1 + elapsed * 15;
+          blastMesh.scale.set(scale, scale, 1);
+          blastMat.opacity = 1 - elapsed / 0.4;
+          requestAnimationFrame(animBlast);
+        } else {
+          scene.remove(blastMesh);
+        }
+      }
+      animBlast();
+    }
+
+    // Spawn fracture blocks upon brick destruction
+    function spawnFractureDebris(pos, color, count = 5) {
+      for (let i = 0; i < count; i++) {
+        const size = 0.35 + Math.random() * 0.3;
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(size, size, size),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.7 })
+        );
+        mesh.castShadow = true;
+        scene.add(mesh);
+
+        const body = new CANNON.Body({
+          mass: 0.15,
+          linearDamping: 0.1,
+          angularDamping: 0.1
+        });
+        body.addShape(new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)));
+        body.position.set(
+          pos.x + (Math.random() - 0.5) * 0.8,
+          pos.y + (Math.random() - 0.5) * 0.8,
+          pos.z + (Math.random() - 0.5) * 0.5
+        );
+        
+        // Random tumbling explosion impulse
+        body.velocity.set(
+          (Math.random() - 0.5) * 16,
+          (Math.random() - 0.5) * 16,
+          Math.random() * 8
+        );
+        body.angularVelocity.set(Math.random()*15, Math.random()*15, Math.random()*15);
+        world.addBody(body);
+
+        debrisList.push({ mesh, body, birth: performance.now(), lifespan: 2200 + Math.random()*1000 });
+      }
+    }
+
+    // --- Weather & Atmosphere Systems ---
+    let weatherParticles = null;
+    let cameraShake = 0;
+
+    function applyWeatherEnvironment(theme) {
+      STATE.currentTheme = theme;
+      if (weatherParticles) scene.remove(weatherParticles);
+
+      const pCount = 600;
+      const geom = new THREE.BufferGeometry();
+      const positions = new Float32Array(pCount * 3);
+
+      for (let i = 0; i < pCount * 3; i += 3) {
+        positions[i] = (Math.random() - 0.5) * 40;
+        positions[i+1] = (Math.random() - 0.5) * 40;
+        positions[i+2] = Math.random() * 15;
+      }
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      let pColor = 0xffe29a;
+      let badge = '🌤️ Штиль';
+
+      if (theme === 'desert') {
+        badge = '🏜️ Песчаная Буря (Снос)';
+        pColor = 0xd4a359;
+        world.gravity.set(1.5, -9.8, 0); // Side wind draft
+        STATE.weatherForce.set(1.2, 0, 0);
+        hemiLight.color.setHex(0xffcb85);
+      } else if (theme === 'space') {
+        badge = '🌌 Невесомость (0.2G)';
+        pColor = 0x88ccff;
+        world.gravity.set(0, -2.0, 0); // Microgravity!
+        STATE.weatherForce.set(0, 0, 0);
+        hemiLight.color.setHex(0x334466);
+      } else if (theme === 'cyber') {
+        badge = '⚡ Энергошторм';
+        pColor = 0x00f0ff;
+        world.gravity.set(0, -9.8, 0);
+        STATE.weatherForce.set(0, 0, 0);
+        hemiLight.color.setHex(0x1188aa);
+      } else if (theme === 'lava') {
+        badge = '🌋 Восходящие Термопотоки';
+        pColor = 0xff4400;
+        world.gravity.set(0, -6.5, 0); // thermal uplift
+        STATE.weatherForce.set(0, 1.8, 0);
+        hemiLight.color.setHex(0xff3300);
+      }
+
+      const mat = new THREE.PointsMaterial({ size: 0.35, color: pColor, transparent: true, opacity: 0.6 });
+      weatherParticles = new THREE.Points(geom, mat);
+      scene.add(weatherParticles);
+
+      document.getElementById('weather-badge').innerText = badge;
+    }
+
+    // --- Brick & Boss Generation ---
+    const BRICK_TYPES = {
+      NORMAL: { hp: 1, color: 0x00f0ff, score: 50 },
+      HARD: { hp: 3, color: 0xff007b, score: 150 },
+      TNT: { hp: 1, color: 0xff9900, score: 100, isTnt: true },
+      GOLD: { hp: 1, color: 0xffd700, score: 200, powerup: true }
+    };
+
+    function createBrick(x, y, type = BRICK_TYPES.NORMAL, w = 2.0, h = 0.9, d = 1.0) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({
+          color: type.color,
+          metalness: 0.6,
+          roughness: 0.2,
+          emissive: type.color,
+          emissiveIntensity: 0.2
+        })
+      );
+      mesh.position.set(x, y, 0);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      const shape = new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2));
+      const body = new CANNON.Body({ mass: 0, material: wallPhysicsMat });
+      body.addShape(shape);
+      body.position.set(x, y, 0);
+      world.addBody(body);
+
+      const brick = { mesh, body, type, hp: type.hp, maxHp: type.hp, w, h };
+      bricks.push(brick);
+      return brick;
+    }
+
+    // --- Boss Construction (Levels 3, 6, 9...) ---
+    function spawnBoss(level) {
+      const bossHud = document.getElementById('boss-hud');
+      bossHud.style.display = 'block';
+
+      const maxHp = 30 + level * 10;
+      document.getElementById('boss-name').innerText = `БОСС: СТРАЖ СФЕРЫ (УРОВЕНЬ ${level})`;
+      updateBossHpBar(maxHp, maxHp);
+
+      const group = new THREE.Group();
+
+      // Boss core
+      const coreMesh = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(2.2, 1),
+        new THREE.MeshStandardMaterial({ color: 0xff0044, metalness: 0.8, roughness: 0.2, emissive: 0x990022 })
+      );
+      group.add(coreMesh);
+
+      // Kinetic protective ring shields
+      const shieldGeo = new THREE.TorusGeometry(3.6, 0.35, 16, 40);
+      const shieldMesh = new THREE.Mesh(shieldGeo, new THREE.MeshStandardMaterial({ color: 0x00f0ff, metalness: 0.9 }));
+      group.add(shieldMesh);
+
+      group.position.set(0, 7, 0);
+      scene.add(group);
+
+      const body = new CANNON.Body({ mass: 0, material: wallPhysicsMat });
+      body.addShape(new CANNON.Sphere(2.5));
+      body.position.set(0, 7, 0);
+      world.addBody(body);
+
+      STATE.boss = {
+        meshGroup: group,
+        coreMesh,
+        shieldMesh,
+        body,
+        hp: maxHp,
+        maxHp,
+        attackTimer: 0
+      };
+    }
+
+    function updateBossHpBar(cur, max) {
+      const pct = Math.max(0, (cur / max) * 100);
+      document.getElementById('boss-bar-fill').style.width = pct + '%';
+    }
+
+    // --- Level Builder & Generator ---
+    function generateLevel(mode = 'classic', theme = 'desert') {
+      // Clear old level
+      bricks.forEach(b => {
+        scene.remove(b.mesh);
+        world.removeBody(b.body);
+      });
+      bricks.length = 0;
+
+      if (STATE.boss) {
+        scene.remove(STATE.boss.meshGroup);
+        world.removeBody(STATE.boss.body);
+        STATE.boss = null;
+        document.getElementById('boss-hud').style.display = 'none';
+      }
+
+      applyWeatherEnvironment(theme);
+
+      // Every 3rd level is a Boss level!
+      if (STATE.level % 3 === 0 && mode !== 'megastructure') {
+        spawnBoss(STATE.level);
+        return;
+      }
+
+      if (mode === 'classic') {
+        const rows = 5, cols = 8;
+        const startY = 11;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const x = (c - (cols - 1) / 2) * 2.4;
+            const y = startY - r * 1.3;
+            let type = BRICK_TYPES.NORMAL;
+            if (r === 0) type = BRICK_TYPES.HARD;
+            else if (Math.random() < 0.15) type = BRICK_TYPES.TNT;
+            else if (Math.random() < 0.15) type = BRICK_TYPES.GOLD;
+            createBrick(x, y, type);
+          }
+        }
+      } else if (mode === 'pyramid') {
+        const layers = 8;
+        for (let i = 0; i < layers; i++) {
+          const count = layers - i;
+          const y = 12 - i * 1.3;
+          for (let j = 0; j < count; j++) {
+            const x = (j - (count - 1) / 2) * 2.4;
+            const type = (i % 2 === 0) ? BRICK_TYPES.HARD : BRICK_TYPES.NORMAL;
+            createBrick(x, y, type);
+          }
+        }
+      } else if (mode === 'megastructure') {
+        // Huge Megastructure Level!
+        const rows = 10, cols = 11;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if ((r + c) % 2 === 0) {
+              const x = (c - (cols - 1) / 2) * 1.8;
+              const y = 13 - r * 1.1;
+              const type = Math.random() < 0.2 ? BRICK_TYPES.TNT : (Math.random() < 0.3 ? BRICK_TYPES.HARD : BRICK_TYPES.NORMAL);
+              createBrick(x, y, type, 1.5, 0.8, 0.8);
+            }
+          }
+        }
+      } else if (mode === 'spiral') {
+        const points = 35;
+        for (let i = 0; i < points; i++) {
+          const angle = i * 0.45;
+          const dist = 1.2 + i * 0.26;
+          const x = Math.cos(angle) * dist;
+          const y = 6 + Math.sin(angle) * dist;
+          const type = (i % 5 === 0) ? BRICK_TYPES.TNT : (i % 3 === 0 ? BRICK_TYPES.GOLD : BRICK_TYPES.NORMAL);
+          createBrick(x, y, type, 1.4, 0.8, 0.8);
+        }
+      } else if (mode === 'chaos') {
+        for (let i = 0; i < 45; i++) {
+          const x = (Math.random() - 0.5) * 18;
+          const y = 1 + Math.random() * 12;
+          const types = [BRICK_TYPES.NORMAL, BRICK_TYPES.HARD, BRICK_TYPES.TNT, BRICK_TYPES.GOLD];
+          createBrick(x, y, types[Math.floor(Math.random()*types.length)], 1.6, 0.8, 0.8);
+        }
+      }
+    }
+
+    // --- Power-Up Drop System ---
+    function spawnPowerUp(x, y) {
+      const types = ['MULTIBALL', 'LASER', 'EXPAND', 'SHIELD'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      
+      const mesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.55),
+        new THREE.MeshStandardMaterial({
+          color: type === 'LASER' ? 0xff0055 : (type === 'MULTIBALL' ? 0x00f0ff : 0x00ff88),
+          emissive: 0xffffff,
+          emissiveIntensity: 0.6
+        })
+      );
+      mesh.position.set(x, y, 0);
+      scene.add(mesh);
+
+      powerUps.push({ mesh, type, y });
+    }
+
+    function activatePowerUp(type) {
+      audio.powerup();
+      if (type === 'MULTIBALL') {
+        const b = balls[0] || { body: paddleBody };
+        spawnBall(b.body.position.x, b.body.position.y + 1, 0, true);
+        spawnBall(b.body.position.x, b.body.position.y + 1, 0, true);
+      } else if (type === 'LASER') {
+        STATE.lasersActive = true;
+        STATE.laserTimer = 10; // 10 seconds of twin blaster firepower
+      } else if (type === 'EXPAND') {
+        STATE.paddleWidth = 6.5;
+        paddleMesh.scale.x = 6.5 / 4.5;
+        world.removeBody(paddleBody);
+        paddleBody.shapes[0] = new CANNON.Box(new CANNON.Vec3(STATE.paddleWidth/2, 0.45, 0.6));
+        world.addBody(paddleBody);
+        setTimeout(() => {
+          STATE.paddleWidth = 4.5;
+          paddleMesh.scale.x = 1.0;
+          world.removeBody(paddleBody);
+          paddleBody.shapes[0] = new CANNON.Box(new CANNON.Vec3(STATE.paddleWidth/2, 0.45, 0.6));
+          world.addBody(paddleBody);
+        }, 8000);
+      }
+    }
+
+    // Fire laser from paddle
+    function fireLaser() {
+      if (!STATE.lasersActive) return;
+      audio.laser();
+      const leftX = paddleBody.position.x - 1.8;
+      const rightX = paddleBody.position.x + 1.8;
+      const y = paddleBody.position.y + 0.8;
+
+      [leftX, rightX].forEach(x => {
+        const mesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.12, 0.12, 1.2),
+          new THREE.MeshBasicMaterial({ color: 0xff0055 })
+        );
+        mesh.rotation.x = Math.PI / 2;
+        mesh.position.set(x, y, 0);
+        scene.add(mesh);
+        lasers.push({ mesh, x, y });
+      });
+    }
+
+    // --- Input & Touch Handling ---
+    let targetPaddleX = 0;
+    const raycaster = new THREE.Raycaster();
+    const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const mouseCoord = new THREE.Vector2();
+
+    function onPointerMove(e) {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      mouseCoord.x = (clientX / window.innerWidth) * 2 - 1;
+      mouseCoord.y = -(clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouseCoord, camera);
+      const intersection = new THREE.Vector3();
+      raycaster.ray.intersectPlane(planeZ, intersection);
+      if (intersection) {
+        const halfLimit = (ARENA.width - STATE.paddleWidth) / 2;
+        targetPaddleX = Math.max(-halfLimit, Math.min(halfLimit, intersection.x));
+      }
+    }
+
+    function triggerLaunchOrAction() {
+      audio.init();
+      if (STATE.ballAttached) {
+        STATE.ballAttached = false;
+        balls.forEach(b => {
+          b.body.velocity.set((Math.random() - 0.5) * 8, 19, 0);
+        });
+      } else if (STATE.lasersActive) {
+        fireLaser();
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+    window.addEventListener('pointerdown', () => { triggerLaunchOrAction(); });
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') triggerLaunchOrAction();
+    });
+
+    document.getElementById('btn-launch').addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerLaunchOrAction();
+    });
+    document.getElementById('btn-fire').addEventListener('click', (e) => {
+      e.stopPropagation();
+      fireLaser();
+    });
+
+    // --- Physics Collisions & Contacts ---
+    world.addEventListener('beginContact', (event) => {
+      const bA = event.bodyA;
+      const bB = event.bodyB;
+
+      // Check ball hit with brick
+      const ball = balls.find(b => b.body === bA || b.body === bB);
+      const brick = bricks.find(br => br.body === bA || br.body === bB);
+
+      if (ball && brick) {
+        audio.bounce();
+        brick.hp--;
+        cameraShake = 0.15;
+
+        // Brick damage flash
+        brick.mesh.material.emissiveIntensity = 1.0;
+        setTimeout(() => { if (brick.mesh) brick.mesh.material.emissiveIntensity = 0.2; }, 80);
+
+        if (brick.hp <= 0) {
+          // Score & Debris
+          STATE.score += brick.type.score;
+          document.getElementById('hud-score').innerText = STATE.score;
+
+          spawnFractureDebris(brick.mesh.position, brick.type.color, 6);
+
+          if (brick.type.isTnt) {
+            triggerKineticExplosion(brick.body.position, 6, 40);
+          }
+          if (brick.type.powerup || Math.random() < 0.2) {
+            spawnPowerUp(brick.body.position.x, brick.body.position.y);
+          }
+
+          // Remove brick
+          scene.remove(brick.mesh);
+          world.removeBody(brick.body);
+          const idx = bricks.indexOf(brick);
+          if (idx > -1) bricks.splice(idx, 1);
+
+          // Check Win Condition
+          if (bricks.length === 0 && !STATE.boss) {
+            nextLevel();
+          }
+        }
+      }
+
+      // Check ball hit with boss
+      if (ball && STATE.boss && (STATE.boss.body === bA || STATE.boss.body === bB)) {
+        audio.bounce();
+        STATE.boss.hp--;
+        cameraShake = 0.25;
+        updateBossHpBar(STATE.boss.hp, STATE.boss.maxHp);
+        if (STATE.boss.hp <= 0) {
+          triggerKineticExplosion(STATE.boss.body.position, 10, 60);
+          scene.remove(STATE.boss.meshGroup);
+          world.removeBody(STATE.boss.body);
+          STATE.boss = null;
+          document.getElementById('boss-hud').style.display = 'none';
+          setTimeout(nextLevel, 1000);
+        }
+      }
+
+      // Ball hit paddle sound
+      if (ball && (paddleBody === bA || paddleBody === bB)) {
+        audio.bounce();
+        // Impart directional spin based on where ball hits paddle
+        const hitOffset = ball.body.position.x - paddleBody.position.x;
+        ball.body.velocity.x += hitOffset * 4.5;
+        // Clamp speed
+        const v = ball.body.velocity;
+        const currentSpd = Math.sqrt(v.x*v.x + v.y*v.y);
+        if (currentSpd < 18) {
+          v.scale(19 / (currentSpd || 1), v);
+        }
+      }
+    });
+
+    function nextLevel() {
+      STATE.level++;
+      document.getElementById('hud-level').innerText = STATE.level;
+      const themes = ['desert', 'space', 'cyber', 'lava'];
+      const nextTheme = themes[(STATE.level - 1) % themes.length];
+      generateLevel('classic', nextTheme);
+      resetBall();
+    }
+
+    function resetBall() {
+      balls.forEach(b => {
+        scene.remove(b.mesh);
+        world.removeBody(b.body);
+      });
+      balls.length = 0;
+      STATE.ballAttached = true;
+      spawnBall(paddleBody.position.x, paddleBody.position.y + 1.2, 0);
+    }
+
+    // --- Main Game Loop (Kinetic Engine) ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min(clock.getDelta(), 0.05);
+
+      if (STATE.running) {
+        // Step Physics with fixed substeps for Havok-like stability
+        world.step(1/60, delta, 5);
+
+        // Apply environment force (wind, thermal uplift)
+        if (STATE.weatherForce.lengthSq() > 0) {
+          balls.forEach(b => b.body.applyForce(STATE.weatherForce, b.body.position));
+        }
+
+        // Smooth Paddle Movement (lerp Kinematic body)
+        paddleBody.position.x += (targetPaddleX - paddleBody.position.x) * 0.35;
+        paddleMesh.position.copy(paddleBody.position);
+
+        // Ball Attached State
+        if (STATE.ballAttached && balls.length > 0) {
+          const mainBall = balls[0];
+          mainBall.body.position.set(paddleBody.position.x, paddleBody.position.y + 1.2, 0);
+          mainBall.body.velocity.set(0, 0, 0);
+        }
+
+        // Sync Ball Mesh with Physics
+        for (let i = balls.length - 1; i >= 0; i--) {
+          const b = balls[i];
+          b.mesh.position.copy(b.body.position);
+          // Keep z locked to 2.5D plane
+          b.body.position.z = 0;
+          b.body.velocity.z = 0;
+
+          // Death check (fell below paddle)
+          if (b.body.position.y < -ARENA.height/2 - 1) {
+            scene.remove(b.mesh);
+            world.removeBody(b.body);
+            balls.splice(i, 1);
+
+            if (balls.length === 0) {
+              STATE.lives--;
+              document.getElementById('hud-lives').innerText = '❤'.repeat(Math.max(0, STATE.lives));
+              if (STATE.lives <= 0) {
+                // Game Over
+                alert("ИГРА ОКОНЧЕНА! Ваш счёт: " + STATE.score);
+                STATE.lives = 3;
+                STATE.score = 0;
+                STATE.level = 1;
+                document.getElementById('hud-lives').innerText = '❤❤❤';
+                document.getElementById('hud-score').innerText = '0';
+                document.getElementById('hud-level').innerText = '1';
+                generateLevel('classic', 'desert');
+              }
+              resetBall();
+            }
+          }
+        }
+
+        // Debris Simulation & Fadeout
+        const now = performance.now();
+        for (let i = debrisList.length - 1; i >= 0; i--) {
+          const deb = debrisList[i];
+          deb.mesh.position.copy(deb.body.position);
+          deb.mesh.quaternion.copy(deb.body.quaternion);
+
+          const progress = (now - deb.birth) / deb.lifespan;
+          if (progress >= 1.0) {
+            scene.remove(deb.mesh);
+            world.removeBody(deb.body);
+            debrisList.splice(i, 1);
+          } else {
+            deb.mesh.scale.setScalar(1.0 - progress * 0.6);
+          }
+        }
+
+        // Power-ups Movement
+        for (let i = powerUps.length - 1; i >= 0; i--) {
+          const p = powerUps[i];
+          p.mesh.position.y -= 7 * delta;
+          p.mesh.rotation.y += 3 * delta;
+          p.mesh.rotation.x += 2 * delta;
+
+          // Check Paddle Pickup
+          if (Math.abs(p.mesh.position.y - paddleBody.position.y) < 1.0 &&
+              Math.abs(p.mesh.position.x - paddleBody.position.x) < STATE.paddleWidth / 2 + 0.5) {
+            activatePowerUp(p.type);
+            scene.remove(p.mesh);
+            powerUps.splice(i, 1);
+            continue;
+          }
+
+          if (p.mesh.position.y < -ARENA.height / 2) {
+            scene.remove(p.mesh);
+            powerUps.splice(i, 1);
+          }
+        }
+
+        // Lasers Movement
+        for (let i = lasers.length - 1; i >= 0; i--) {
+          const l = lasers[i];
+          l.mesh.position.y += 35 * delta;
+
+          // Check Laser hit on Bricks
+          let hit = false;
+          for (let j = bricks.length - 1; j >= 0; j--) {
+            const br = bricks[j];
+            if (Math.abs(l.mesh.position.x - br.mesh.position.x) < br.w / 2 &&
+                Math.abs(l.mesh.position.y - br.mesh.position.y) < br.h / 2) {
+              br.hp--;
+              spawnFractureDebris(br.mesh.position, br.type.color, 4);
+              if (br.hp <= 0) {
+                STATE.score += br.type.score;
+                document.getElementById('hud-score').innerText = STATE.score;
+                scene.remove(br.mesh);
+                world.removeBody(br.body);
+                bricks.splice(j, 1);
+              }
+              hit = true;
+              break;
+            }
+          }
+          if (hit || l.mesh.position.y > ARENA.height / 2) {
+            scene.remove(l.mesh);
+            lasers.splice(i, 1);
+          }
+        }
+
+        // Boss Mechanics Animation
+        if (STATE.boss) {
+          STATE.boss.shieldMesh.rotation.z += 1.5 * delta;
+          STATE.boss.coreMesh.rotation.y += 0.8 * delta;
+          // Sine wave flight motion
+          const bossTime = clock.getElapsedTime();
+          const targetX = Math.sin(bossTime * 1.5) * 6;
+          STATE.boss.body.position.x = targetX;
+          STATE.boss.meshGroup.position.x = targetX;
+        }
+
+        // Weather particles drift
+        if (weatherParticles) {
+          const pos = weatherParticles.geometry.attributes.position.array;
+          for (let i = 1; i < pos.length; i += 3) {
+            pos[i] -= 12 * delta;
+            if (STATE.currentTheme === 'desert') pos[i - 1] += 8 * delta; // sand drift
+            if (pos[i] < -20) pos[i] = 20;
+            if (pos[i - 1] > 20) pos[i - 1] = -20;
+          }
+          weatherParticles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // Camera Shake decay
+        if (cameraShake > 0) {
+          camera.position.x = (Math.random() - 0.5) * cameraShake * 2;
+          camera.position.y = -22 + (Math.random() - 0.5) * cameraShake * 2;
+          cameraShake = Math.max(0, cameraShake - delta * 0.9);
+        } else {
+          camera.position.x = 0;
+          camera.position.y = -22;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // --- UI Listeners & Generator Integration ---
+    document.getElementById('btn-play').addEventListener('click', () => {
+      audio.init();
+      document.getElementById('modal-start').style.display = 'none';
+      STATE.running = true;
+      generateLevel('classic', 'desert');
+      resetBall();
+    });
+
+    document.getElementById('btn-menu').addEventListener('click', () => {
+      document.getElementById('modal-menu').style.display = 'flex';
+      STATE.running = false;
+    });
+
+    document.getElementById('btn-menu-close').addEventListener('click', () => {
+      document.getElementById('modal-menu').style.display = 'none';
+      STATE.running = true;
+    });
+
+    document.getElementById('btn-gen-start').addEventListener('click', () => {
+      const preset = document.getElementById('gen-preset').value;
+      const theme = document.getElementById('gen-theme').value;
+      document.getElementById('modal-menu').style.display = 'none';
+      STATE.running = true;
+      generateLevel(preset, theme);
+      resetBall();
+    });
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Dynamic PWA Manifest and Service Worker Generator ---
+    (function setupPWA() {
+      const manifest = {
+        name: "Havoc Arkanoid 3D",
+        short_name: "Havoc3D",
+        start_url: ".",
+        display: "standalone",
+        background_color: "#05070a",
+        theme_color: "#00f0ff",
+        icons: [{
+          src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%2300f0ff'/><rect x='20' y='75' width='60' height='12' rx='6' fill='%23ffffff'/></svg>",
+          sizes: "192x192 512x512",
+          type: "image/svg+xml"
+        }]
+      };
+      const stringManifest = JSON.stringify(manifest);
+      const blob = new Blob([stringManifest], { type: 'application/json' });
+      const manifestURL = URL.createObjectURL(blob);
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = manifestURL;
+      document.head.appendChild(link);
+
+      // Register inline Service Worker
+      if ('serviceWorker' in navigator) {
+        const swCode = `
+          const CACHE = 'havoc-v1';
+          self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+          self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+          self.addEventListener('fetch', e => {
+            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+          });
+        `;
+        const swBlob = new Blob([swCode], { type: 'text/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
+      }
+    })();
+  </script>
+</body>
+</html>
