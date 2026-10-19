@@ -87,6 +87,7 @@ export class Game {
   // ———————————————————————— Загрузка уровня ————————————————————————
   load(level, run) {
     this.dispose();
+    this.loadId = (this.loadId || 0) + 1;
     this.level = level;
     this.run = run;
     this.loc = LOCATIONS[level.location % LOCATIONS.length];
@@ -1119,7 +1120,7 @@ export class Game {
     this.shield = 0; this.shieldMesh.visible = false;
     if (this.run.lives <= 0) {
       this.state = 'over';
-      setTimeout(() => this.app.onGameOver(this.result()), 900);
+      this.later(() => this.app.onGameOver(this.result()), 900);
     } else {
       this.state = 'ready';
       this.ui.toast(`ШАР ПОТЕРЯН · ОСТАЛОСЬ ${this.run.lives}`, 'bad');
@@ -1152,11 +1153,17 @@ export class Game {
       this.explosionQueue.push({ x: b.x, z: b.z, t: delay, power: 0.5 });
       delay += 0.04;
     }
-    setTimeout(() => {
+    this.later(() => {
       for (const b of this.brickList) if (b.alive && !b.steel) { b.alive = false; this.writeBrick(b); }
       this.remaining = 0;
       this.levelClear();
     }, (delay + 0.8) * 1000);
+  }
+
+  // таймер, который не сработает, если уровень уже сменился
+  later(fn, ms) {
+    const id = this.loadId;
+    setTimeout(() => { if (this.loadId === id && this.scene) fn(); }, ms);
   }
 
   levelClear() {
@@ -1165,11 +1172,11 @@ export class Game {
     this.slowmo = Math.max(this.slowmo, 0.9);
     this.audio.clear();
     for (const b of this.balls) { b.stuck = false; }
-    setTimeout(() => this.app.onLevelClear(this.result()), 1400);
+    this.later(() => this.app.onLevelClear(this.result()), 1400);
   }
 
   result() {
-    const timeBonus = Math.max(0, Math.round((180 - this.levelTime) * 20));
+    const timeBonus = this.level.bonus ? 0 : Math.max(0, Math.round((180 - this.levelTime) * 20));
     return {
       score: this.run.score, lives: this.run.lives, time: this.levelTime, bricks: this.bricksBroken,
       maxCombo: this.maxCombo, star: this.starFound, perfect: !this.lostBall, timeBonus,
@@ -1235,7 +1242,11 @@ export class Game {
       if (o.geometry && o.geometry !== GEO_CACHE?.brick && o.geometry !== GEO_CACHE?.ball && o.geometry !== GEO_CACHE?.laser) o.geometry.dispose();
       if (o.material) {
         const ms = Array.isArray(o.material) ? o.material : [o.material];
-        ms.forEach((m) => m.dispose());
+        ms.forEach((m) => {
+          for (const k of ['map', 'emissiveMap']) if (m[k] && !m[k].userData.keep) m[k].dispose();
+          if (m.uniforms?.map?.value && !m.uniforms.map.value.userData.keep) m.uniforms.map.value.dispose();
+          m.dispose();
+        });
       }
     });
     if (this.brickMeshes) Object.values(this.brickMeshes).forEach((m) => m.dispose());

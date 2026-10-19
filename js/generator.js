@@ -102,7 +102,9 @@ function fillPattern(g, R, diff, dens) {
     const sc = Math.max(1, Math.min(Math.floor(cols / iw), Math.floor(rows / ih)));
     const ox = Math.floor((cols - iw * sc) / 2), oy = Math.floor((rows - ih * sc) / 2);
     for (let r = 0; r < ih * sc; r++) for (let c = 0; c < iw * sc; c++) {
-      if (inv[Math.floor(r / sc)][Math.floor(c / sc)] === 'X') g[oy + r][ox + c] = hpForRow(r, ih * sc, diff);
+      const y = oy + r, x = ox + c;
+      if (y < 0 || x < 0 || y >= rows || x >= cols) continue;
+      if (inv[Math.floor(r / sc)][Math.floor(c / sc)] === 'X') g[y][x] = hpForRow(r, ih * sc, diff);
     }
     return kind;
   }
@@ -277,7 +279,7 @@ export function generateLevel(opts = {}) {
   if (breakable < 4) for (let c = 0; c < cols; c++) g[rows - 1][c] = '1';
   // боссу нужно место сверху
   let grid = g.map((row) => row.join(''));
-  if (o.boss) grid = [...Array(5).fill('.'.repeat(cols)), ...grid.slice(Math.max(0, rows - 3))];
+  if (o.boss) grid = [...Array(5).fill('.'.repeat(cols)), ...grid.slice(Math.max(0, rows - Math.max(3, Math.floor(rows * 0.4))))];
 
   const loc = o.location >= 0 ? o.location : R.int(0, LOCATIONS.length - 1);
   const name = `${R.pick(ADJ)} ${R.pick(NOUN)}`;

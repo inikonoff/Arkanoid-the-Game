@@ -5,6 +5,7 @@ import { dotTexture } from './textures.js';
 import { glow } from './mat.js';
 
 const DOT = dotTexture();
+DOT.userData.keep = true;
 
 function pointsLayer(scene, count, color, size, opacity = 0.9, additive = false) {
   const pos = new Float32Array(count * 3);

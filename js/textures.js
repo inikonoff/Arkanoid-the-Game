@@ -114,6 +114,7 @@ export function groundTexture(kind, colors) {
   }
   g.putImageData(img, 0, 0);
   const t = tex(c, 24);
+  t.userData.keep = true;
   GROUND_CACHE.set(key, t);
   return t;
 }
@@ -177,5 +178,6 @@ export function powerupLabel(text, bg, fg) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = THREE.RepeatWrapping;
+  t.userData.keep = true;
   return t;
 }

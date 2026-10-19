@@ -141,7 +141,7 @@ export class UI {
     items.push({ lbl: 'Настройки', meta: (settings.preset || '').toUpperCase(), act: () => this.show('settings') });
     items.push({ lbl: 'Как играть', meta: 'МАНУАЛ', act: () => this.show('help') });
     items.forEach((it, i) => {
-      const b = el('button', 'menu-item' + (it.primary ? ' primary' : '') + (it.toggle ? ' toggle' : ''),
+      const b = el('button', 'menu-item' + (it.primary ? ' primary' : '') + (it.toggle ? ' opt' : ''),
         `<span class="idx">${String(i + 1).padStart(2, '0')}</span><span class="lbl">${it.lbl}</span><span class="meta">${it.meta}</span>`);
       b.addEventListener('click', () => { this.app.audio.unlock(); it.act(); });
       list.appendChild(b);

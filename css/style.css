@@ -49,6 +49,7 @@ input { font: inherit; color: inherit; }
   padding: calc(18px + var(--safe-t)) calc(22px + var(--safe-r)) calc(18px + var(--safe-b)) calc(22px + var(--safe-l));
   touch-action: pan-y;
 }
+.screen > * { flex-shrink: 0; }
 .screen.active { display: flex; animation: screen-in 0.28s cubic-bezier(.2,.8,.2,1); }
 @keyframes screen-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .screen:not(#menu):not(.modal) { background: linear-gradient(180deg, rgba(11,11,10,0.94), rgba(11,11,10,0.98)); overflow-y: auto; }
@@ -100,7 +101,7 @@ input { font: inherit; color: inherit; }
 .menu-item:hover::before, .menu-item:focus-visible::before { transform: scaleY(1); }
 .menu-item:hover .idx { color: var(--accent); }
 .menu-item.primary .lbl { color: var(--accent); }
-.menu-item.toggle .meta b { color: var(--accent); }
+.menu-item.opt .meta b { color: var(--accent); }
 
 .menu-foot { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--faint); letter-spacing: 0.12em; }
 #menu-ticker { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

@@ -417,7 +417,10 @@ export class Environment {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
         const ms = Array.isArray(o.material) ? o.material : [o.material];
-        ms.forEach((m) => m.dispose());
+        ms.forEach((m) => {
+          for (const k of ['map', 'emissiveMap']) if (m[k] && !m[k].userData.keep) m[k].dispose();
+          m.dispose();
+        });
       }
     });
     this.scene.fog = null;

@@ -49,7 +49,7 @@ export class Renderer {
   }
 
   buildComposer() {
-    this.composer?.dispose?.();
+    if (this.composer) { this.composer.passes.forEach((p) => p.dispose?.()); this.composer.dispose(); this.composer.renderTarget1.dispose(); }
     this.composer = null;
     if (!settings.bloom || !this.scene) return;
     const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
