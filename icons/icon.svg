@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0b0b0a"/>
+  <g fill="none" stroke="#4a4741" stroke-width="2">
+    <path d="M40 40h40M40 40v40M472 40h-40M472 40v40M40 472h40M40 472v-40M472 472h-40M472 472v-40"/>
+  </g>
+  <g>
+    <rect x="96" y="112" width="96" height="40" fill="#ece8df"/>
+    <rect x="208" y="112" width="96" height="40" fill="#ece8df"/>
+    <rect x="320" y="112" width="96" height="40" fill="#8b877d"/>
+    <rect x="96" y="168" width="96" height="40" fill="#8b877d"/>
+    <rect x="320" y="168" width="96" height="40" fill="#ece8df"/>
+    <g fill="#ff5a1f">
+      <rect x="196" y="160" width="10" height="10" transform="rotate(30 201 165)"/>
+      <rect x="236" y="196" width="14" height="14" transform="rotate(-20 243 203)"/>
+      <rect x="282" y="176" width="9" height="9" transform="rotate(45 286 180)"/>
+      <rect x="214" y="222" width="8" height="8"/>
+    </g>
+  </g>
+  <circle cx="256" cy="300" r="26" fill="#ff5a1f"/>
+  <rect x="166" y="378" width="180" height="28" rx="14" fill="#ece8df"/>
+  <rect x="196" y="374" width="120" height="4" fill="#ff5a1f"/>
+</svg>
