@@ -10,7 +10,7 @@ import { Boss, BOSSES } from './boss.js';
 import { mat, glow } from './mat.js';
 import { powerupLabel } from './textures.js';
 import { vibrate } from './audio.js';
-import { BrickWorld } from './brickphys.js';
+import { BrickWorld, TOWER_B, TOWER_H } from './brickphys.js';
 
 export const CELL_W = 1.5;
 export const CELL_D = 0.75;
@@ -45,6 +45,7 @@ const TYPE = {
   S: { hp: 1, cat: 'glass', color: '#e0c3ff', hidden: true, secret: true },
   I: { hp: 2, cat: 'std', hidden: true },
   R: { hp: 1, cat: 'std', regen: true },
+  T: { hp: 4, cat: 'tower', tower: true },
 };
 
 const _o = new THREE.Object3D();
@@ -61,6 +62,7 @@ function geos() {
   GEO_CACHE = {
     key,
     brick: rounded ? new RoundedBoxGeometry(BRICK_W, BRICK_H, BRICK_D, 2, 0.09) : new THREE.BoxGeometry(BRICK_W, BRICK_H, BRICK_D),
+    tower: rounded ? new RoundedBoxGeometry(TOWER_B, TOWER_H, TOWER_B, 2, 0.07) : new THREE.BoxGeometry(TOWER_B, TOWER_H, TOWER_B),
     ball: new THREE.SphereGeometry(1, 24, 16),
     laser: new THREE.BoxGeometry(0.08, 0.08, 0.7),
   };
@@ -179,7 +181,7 @@ export class Game {
     const f = this.field, pal = this.loc.bricks;
     this.brickList = [];
     this.portals = [];
-    const counts = { std: 40, metal: 4, glass: 4, glow: 4 };
+    const counts = { std: 40, metal: 4, glass: 4, glow: 4, tower: 0 };
     const portalCells = [];
     grid.forEach((row, r) => {
       for (let c = 0; c < row.length; c++) {
@@ -192,7 +194,7 @@ export class Game {
         const b = {
           i: r * f.cols + c, c, r, ch, x: f.ox + (c + 0.5) * CELL_W, z: f.brickTop + (r + 0.5) * CELL_D,
           hp: t.hp, maxHp: t.hp, cat: t.cat, steel: !!t.steel, explosive: !!t.explosive, bonus: !!t.bonus,
-          secret: !!t.secret, hidden: !!t.hidden, regen: !!t.regen, gold: !!t.gold, alive: true,
+          secret: !!t.secret, hidden: !!t.hidden, regen: !!t.regen, gold: !!t.gold, tower: !!t.tower, alive: true,
           color: new THREE.Color(t.color || (t.regen ? '#7cff9b' : pal[(r + (ch === 'I' ? 2 : 0)) % pal.length])),
           wy: 0, wvy: 0, wrx: 0, wvrx: 0, wrz: 0, wvrz: 0, appear: 1, regenT: 0,
         };
@@ -213,12 +215,14 @@ export class Game {
       metal: mat({ color: '#ffffff', roughness: 0.22, metalness: 0.95 }),
       glass: mat({ color: '#ffffff', roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.55, emissive: '#223344', emissiveIntensity: 0.4 }),
       glow: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.7, 1.7, 1.7) }),
+      tower: mat({ color: '#ffffff', roughness: 0.5, metalness: 0.15 }),
     };
     this.glowMat = mats.glow;
     this.brickMeshes = {};
-    this.catCount = { std: 0, metal: 0, glass: 0, glow: 0 };
+    this.catCount = { std: 0, metal: 0, glass: 0, glow: 0, tower: 0 };
     for (const cat of Object.keys(mats)) {
-      const m = new THREE.InstancedMesh(G.brick, mats[cat], counts[cat]);
+      if (!counts[cat]) { mats[cat].dispose(); continue; }
+      const m = new THREE.InstancedMesh(cat === 'tower' ? G.tower : G.brick, mats[cat], counts[cat]);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.castShadow = settings.shadows > 0 && cat !== 'glass';
       m.receiveShadow = settings.shadows >= 2;
@@ -253,12 +257,78 @@ export class Game {
     const m = this.brickMeshes[b.cat];
     if (!b.alive || (b.hidden && !b.revealed)) { m.setMatrixAt(b.inst, ZERO); m.instanceMatrix.needsUpdate = true; return; }
     const s = b.appear;
-    _o.position.set(b.x, BRICK_H / 2 + b.wy, b.z);
-    _o.rotation.set(b.wrx, -b.a, b.wrz);
-    _o.scale.set(s, s, s);
-    _o.updateMatrix();
-    m.setMatrixAt(b.inst, _o.matrix);
+    if (b.tower) {
+      this.writeTower(b, m, s);
+    } else {
+      _o.position.set(b.x, BRICK_H / 2 + b.wy, b.z);
+      _o.rotation.set(b.wrx, -b.a, b.wrz);
+      _o.scale.set(s, s, s);
+      _o.updateMatrix();
+      m.setMatrixAt(b.inst, _o.matrix);
+    }
     m.instanceMatrix.needsUpdate = true;
+  }
+
+  // Башня: стоит, качается вокруг ребра основания (3D-наклон) или лежит бревном
+  writeTower(b, m, s) {
+    if (b.fallen) {
+      _o.position.set(b.x, TOWER_B / 2 + b.wy * 0.3, b.z);
+      _o.rotation.set(b.wrx * 0.3, -b.a, -Math.PI / 2);
+      _o.scale.set(s, s, s);
+      _o.updateMatrix();
+      m.setMatrixAt(b.inst, _o.matrix);
+      return;
+    }
+    _qYaw.setFromAxisAngle(_up, -b.a);
+    if (b.tilt > 0) {
+      _axis.set(b.tdz, 0, -b.tdx);
+      _qTilt.setFromAxisAngle(_axis, b.tilt);
+      _qYaw.premultiply(_qTilt);
+      _v.set(-b.tdx * b.tbd, TOWER_H / 2, -b.tdz * b.tbd).applyQuaternion(_qTilt);
+      _v.x += b.pivX; _v.z += b.pivZ;
+    } else {
+      // лёгкое покачивание от ударов (визуал)
+      _qTilt.setFromEuler(_e.set(b.wrx * 0.35, 0, b.wrz * 0.35));
+      _qYaw.premultiply(_qTilt);
+      _v.set(b.x, TOWER_H / 2 + b.wy * 0.3, b.z);
+    }
+    _s3.set(s, s, s);
+    _m4.compose(_v, _qYaw, _s3);
+    m.setMatrixAt(b.inst, _m4);
+  }
+
+  // Башни, упавшие за кадр: удар по тому, что под ними, пыль, домино
+  onTowersLanded() {
+    const L = this.world.landed;
+    this.world.landed = [];
+    for (const e of L) {
+      const b = e.b;
+      if (!b.alive) continue;
+      this.towersFallen = (this.towersFallen || 0) + 1;
+      // звено цепочки: башню повалила другая упавшая башня
+      const n = b.chain || 1;
+      if (n >= 2) this.ui.toast(`ДОМИНО ×${n}`, 'good');
+      this.addScore(150 * n, b.x, b.z);
+      this.audio.thud?.();
+      this.fx.shake(0.18);
+      vibrate(25);
+      // пыль вдоль бревна
+      const dust = _c.set(this.loc.floor || '#555').lerp(_c2.set('#9a948a'), 0.7);
+      for (let i = 0; i < this.fx.amount(10); i++) {
+        const t = (Math.random() - 0.5) * TOWER_H;
+        this.fx.smoke.emit(b.x + e.dx * t, 0.2, b.z + e.dz * t, (Math.random() - 0.5) * 2, 0.6 + Math.random(), (Math.random() - 0.5) * 2,
+          dust, 1.1, 0.9 + Math.random() * 0.6, { grow: 1.6, drag: 1.6, alpha: 0.4 });
+      }
+      this.fx.debris.spawn(b.x, 0.3, b.z, b.color, this.fx.debrisAmount(8), { speed: 3, up: 3, size: 0.14, life: 2, sx: TOWER_H, sz: 0.5 });
+      this.pushNeighbors(b.x, b.z, 2.6, 1.4);
+      // сама башня трескается от падения, придавленное — получает урон
+      this.damageBrick(b, 1, { nx: e.dx, nz: e.dz });
+      for (const o of e.hits) {
+        if (!o.alive || (o.tower && !o.fallen)) continue;
+        this.damageBrick(o, 2, { nx: e.dx, nz: e.dz });
+      }
+      this.checkClear();
+    }
   }
 
   makePortal(c, r, color) {
@@ -436,6 +506,7 @@ export class Game {
       for (const b of this.world.moved) if (!this.wobbling.has(b)) this.writeBrick(b);
       this.world.moved.clear();
     }
+    if (this.world.landed.length) this.onTowersLanded();
     this.weather.update(sdt);
     this.updateExplosions(sdt);
     this.updateBricks(sdt);
@@ -697,7 +768,7 @@ export class Game {
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     const kind = b.cat === 'glass' ? 'glass' : b.cat === 'metal' ? 'metal' : 'std';
-    this.fx.shatter(b.x, b.z, b.color, kind, src.nx || 0, src.nz || 0);
+    this.fx.shatter(b.x, b.z, b.color, kind, src.nx || 0, src.nz || 0, b.tower && !b.fallen ? TOWER_H : b.h || BRICK_H, b.tower && b.fallen ? TOWER_H : 1.2);
     if (kind === 'glass') this.audio.glass(); else this.audio.brick(b.maxHp, this.combo);
     vibrate(kind === 'metal' ? 14 : 6);
     // волна по соседям: визуальный подскок + реальный толчок
@@ -779,8 +850,8 @@ export class Game {
   // верх твёрдого кирпича в точке (для укладки обломков)
   solidTop = (x, z) => {
     const b = this.world.brickAt(x, z);
-    if (!b || (b.hidden && !b.revealed)) return 0;
-    return BRICK_H + b.wy;
+    if (!b || (b.hidden && !b.revealed) || (b.tower && b.tilt > 0 && !b.fallen)) return 0;
+    return b.h + b.wy * 0.3;
   };
 
   updateExplosions(dt) {
@@ -1091,6 +1162,7 @@ export class Game {
         if (b) {
           dead = true;
           this.world.impulse(b, 0, -0.9, L.x, L.z);
+          this.world.tip(b, 0, -2.5, 1.2);
           this.damageBrick(b, 1, { nx: 0, nz: -1 });
         }
       }
@@ -1262,7 +1334,7 @@ export class Game {
     this.env?.dispose();
     this.boss?.dispose();
     this.scene.traverse((o) => {
-      if (o.geometry && o.geometry !== GEO_CACHE?.brick && o.geometry !== GEO_CACHE?.ball && o.geometry !== GEO_CACHE?.laser) o.geometry.dispose();
+      if (o.geometry && o.geometry !== GEO_CACHE?.brick && o.geometry !== GEO_CACHE?.tower && o.geometry !== GEO_CACHE?.ball && o.geometry !== GEO_CACHE?.laser) o.geometry.dispose();
       if (o.material) {
         const ms = Array.isArray(o.material) ? o.material : [o.material];
         ms.forEach((m) => {
@@ -1279,5 +1351,13 @@ export class Game {
 }
 
 const _c = new THREE.Color();
+const _c2 = new THREE.Color();
+const _up = new THREE.Vector3(0, 1, 0);
+const _axis = new THREE.Vector3();
+const _qYaw = new THREE.Quaternion();
+const _qTilt = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _s3 = new THREE.Vector3();
+const _m4 = new THREE.Matrix4();
 const _tgt = new THREE.Vector3();
 export { BOSSES };

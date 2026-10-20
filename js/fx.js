@@ -40,7 +40,7 @@ export class Debris {
       const i = this.next;
       this.next = (this.next + 1) % this.cap;
       const i3 = i * 3;
-      this.p[i3] = x + (Math.random() - 0.5) * sx; this.p[i3 + 1] = y + Math.random() * 0.4; this.p[i3 + 2] = z + (Math.random() - 0.5) * sz;
+      this.p[i3] = x + (Math.random() - 0.5) * sx; this.p[i3 + 1] = y + Math.random() * (o.sy ?? 0.4); this.p[i3 + 2] = z + (Math.random() - 0.5) * sz;
       const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.9);
       this.v[i3] = Math.cos(a) * s + (o.vx ?? 0); this.v[i3 + 1] = up * (0.4 + Math.random()); this.v[i3 + 2] = Math.sin(a) * s + (o.vz ?? 0);
       this.r[i3] = Math.random() * 6; this.r[i3 + 1] = Math.random() * 6; this.r[i3 + 2] = Math.random() * 6;
@@ -302,12 +302,13 @@ export class FX {
   }
 
   // Разрушение кирпича
-  shatter(x, z, color, kind = 'std', dirX = 0, dirZ = 0) {
+  shatter(x, z, color, kind = 'std', dirX = 0, dirZ = 0, height = 0.62, len = 1.2) {
     const glass = kind === 'glass';
-    const n = glass ? 26 : kind === 'metal' ? 14 : 18;
-    this.debris.spawn(x, 0.35, z, color, this.debrisAmount(n), {
+    const tall = height / 0.62;
+    const n = Math.round((glass ? 26 : kind === 'metal' ? 14 : 18) * Math.min(3, Math.max(tall, len / 1.2)));
+    this.debris.spawn(x, 0.1, z, color, this.debrisAmount(n), {
       speed: glass ? 6 : 4.5, up: glass ? 6 : 5, size: glass ? 0.14 : 0.24, life: glass ? 2.2 : 3.6,
-      sx: 1.2, sz: 0.5, vx: dirX * 2.5, vz: dirZ * 2.5,
+      sx: len, sz: 0.5, sy: height, vx: dirX * 2.5, vz: dirZ * 2.5,
     });
     this.sparksAt(x, 0.4, z, color, glass ? 18 : 10, 5, { size: 0.16, life: 0.45 });
     const c = this.tmpColor.set(color).lerp(new THREE.Color('#888'), 0.6);

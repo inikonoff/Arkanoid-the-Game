@@ -110,6 +110,7 @@ export class Audio {
     this.tone(90, 0.6, 'sine', 0.5, { slide: 0.3 });
   }
   thunder() { this.noiseBurst(1.6, 0.6, { freq: 600, slide: 0.1 }); this.noiseBurst(0.15, 0.4, { freq: 6000, type: 'highpass', slide: 1 }); }
+  thud() { this.tone(70, 0.35, 'sine', 0.45, { slide: 0.5 }); this.noiseBurst(0.35, 0.35, { freq: 700, slide: 0.2 }); }
   geyser() { this.noiseBurst(1.4, 0.3, { freq: 900, type: 'bandpass', q: 0.7, slide: 1.8 }); }
   power(good = true) {
     const base = good ? 523 : 330;

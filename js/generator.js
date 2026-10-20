@@ -241,6 +241,12 @@ function sprinkle(g, R, diff, mode) {
   take(Math.round(total * (crazy ? 0.05 : 0.015) * (0.5 + diff)), 'I');
   take(Math.round(total * (crazy ? 0.06 : 0.02) * diff), 'R');
   if (R.chance(0.7)) take(1, 'S');
+  take(Math.round(total * 0.025 * (0.4 + diff)), 'T');
+  // колонна башен через ряд — готовое домино
+  if (R.chance(0.35) && rows >= 6) {
+    const c = R.int(0, cols - 1);
+    for (let r = Math.floor(rows / 3); r < rows; r += 2) if (g[r][c] !== '#') g[r][c] = 'T';
+  }
   const portals = mode === 'insane' ? 2 : (R.chance(0.25) ? 1 : 0);
   take(portals * 2, 'P');
 }
