@@ -275,8 +275,11 @@ class App {
     let last = performance.now();
     let pausedRender = 0;
     let fpsAcc = 0, fpsN = 0, fpsT = 0;
+    let rawLast = performance.now();
     const frame = (now) => {
       requestAnimationFrame(frame);
+      this.renderer.sampleRefresh(now - rawLast);
+      rawLast = now;
       const cap = settings.fpsCap;
       if (cap && now - last < 1000 / cap - 1.5) return;
       const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));

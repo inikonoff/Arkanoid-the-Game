@@ -1,5 +1,5 @@
 // Service worker: офлайн-кэш всех ресурсов игры + кэш шрифтов Google.
-const VERSION = 'kinetic-v1.2.0';
+const VERSION = 'kinetic-v1.3.0';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './js/main.js', './js/settings.js', './js/renderer.js', './js/audio.js', './js/ui.js', './js/game.js',
@@ -11,7 +11,7 @@ const CORE = [
   './vendor/three/addons/postprocessing/ShaderPass.js', './vendor/three/addons/postprocessing/Pass.js',
   './vendor/three/addons/postprocessing/MaskPass.js', './vendor/three/addons/environments/RoomEnvironment.js',
   './vendor/three/addons/geometries/RoundedBoxGeometry.js', './vendor/three/addons/shaders/CopyShader.js',
-  './vendor/three/addons/shaders/LuminosityHighPassShader.js', './vendor/three/addons/shaders/OutputShader.js',
+  './vendor/three/addons/shaders/LuminosityHighPassShader.js', './vendor/three/addons/shaders/OutputShader.js', './vendor/three/addons/shaders/FXAAShader.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
 ];
 

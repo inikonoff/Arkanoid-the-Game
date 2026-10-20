@@ -6,7 +6,7 @@ import { settings } from './settings.js';
 export const BOSSES = {
   scarab: { name: 'СКАРАБЕЙ-КОЛОСС', hp: 22, r: 1.9, sweep: 0.45, attack: 'spread', every: 2.6, summon: true, orbiters: 0 },
   hydra: { name: 'ТОТЕМ-ГИДРА', hp: 20, r: 1.6, sweep: 0.3, attack: 'aimed', every: 2.0, orbiters: 3, orbitR: 3.3, orbitSpeed: 0.7, orbHp: 5 },
-  wyrm: { name: 'КРИО-ЗМЕЙ', hp: 26, r: 1.8, sweep: 0.4, attack: 'beam', every: 4.2, orbiters: 6, orbitR: 3.1, orbitSpeed: 1.3 },
+  wyrm: { name: 'КРИО-ЗМЕЙ', hp: 28, r: 1.8, sweep: 0.4, attack: 'beam', every: 4.4, orbiters: 6, orbitR: 3.1, orbitSpeed: 1.0, orbHp: 2 },
   magma: { name: 'МАГМА-ЯДРО', hp: 30, r: 1.7, sweep: 0.25, attack: 'rain', every: 3.2, orbiters: 5, orbitR: 2.8, orbitSpeed: 0.55, orbHp: 3 },
   kraken: { name: 'КРАКЕН БЕЗДНЫ', hp: 30, r: 1.9, sweep: 0.35, attack: 'ink', every: 3.0, orbiters: 4, orbitR: 3.4, orbitSpeed: 0.9, wobble: true },
   mech: { name: 'МЕХ-СТРАЖ', hp: 34, r: 1.8, sweep: 0.7, attack: 'burst', every: 2.4, orbiters: 0, summon: true },
@@ -465,7 +465,8 @@ export class Boss {
           if (o.hp <= 0) {
             o.alive = false;
             this.game.scene.remove(o.mesh);
-            this.game.fx.explode(o.x, o.z, 0.8, this.type === 'hydra' ? '#3e8a35' : '#8a7a70');
+            this.game.fx.explode(o.x, o.z, 0.8, { hydra: '#3e8a35', wyrm: '#bfe9ff' }[this.type] || '#8a7a70');
+            if (this.type === 'wyrm') { this.game.fx.shatter(o.x, o.z, '#cdeeff', 'glass'); this.game.audio.glass(); }
             this.game.audio.explosion(0.8);
             this.damage(3, o.x, o.z);
           }

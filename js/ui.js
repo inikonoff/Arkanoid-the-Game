@@ -13,24 +13,24 @@ const SET_SCHEMA = [
   {
     id: 'gfx', label: 'ГРАФИКА', items: [
       { key: 'preset', type: 'seg', label: 'Пресет качества', wide: true, options: [['auto', 'АВТО'], ['ultra', 'УЛЬТРА'], ['high', 'ВЫСОКО'], ['medium', 'СРЕДНЕ'], ['low', 'НИЗКО'], ['potato', 'КАРТОШКА']], hint: '«Картошка» — для самых слабых телефонов: низкое разрешение, без теней, пост-эффектов и реверба.' },
-      { key: 'renderScale', type: 'range', label: 'Разрешение рендера', min: 0.4, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Главный рычаг FPS. 70% почти незаметно на телефоне.' },
-      { key: 'pixelRatioCap', type: 'seg', label: 'Предел плотности пикселей', options: [[1, '1×'], [1.5, '1.5×'], [2, '2×'], [3, '3×']], hint: 'Ограничивает Retina/AMOLED-экраны, которые рисуют в 3× больше пикселей.' },
-      { key: 'fpsCap', type: 'seg', label: 'Ограничение FPS', options: [[30, '30'], [45, '45'], [60, '60'], [90, '90'], [120, '120'], [0, '∞']], hint: '30 FPS экономит батарею и греет телефон меньше.' },
-      { key: 'adaptive', type: 'toggle', label: 'Адаптивное разрешение', hint: 'Автоматически снижает разрешение при просадках FPS.' },
-      { key: 'adaptiveTarget', type: 'seg', label: 'Целевой FPS адаптации', options: [[30, '30'], [45, '45'], [55, '55'], [60, '60']] },
-      { key: 'shadows', type: 'seg', label: 'Тени', req: 1, options: [[0, 'ВЫКЛ'], [1, '512'], [2, '1024'], [3, '2048']], hint: 'Размер карты теней. Тяжело для мобильных GPU.' },
-      { key: 'materials', type: 'seg', label: 'Материалы', req: 1, options: [['pbr', 'PBR + ОТРАЖЕНИЯ'], ['simple', 'ПРОСТЫЕ']], hint: 'Простые — Ламберт без карт окружения, в 2–3 раза дешевле.' },
-      { key: 'bloom', type: 'toggle', label: 'Свечение (bloom)', hint: 'Пост-эффект свечения неона, огня и лазеров.' },
-      { key: 'bloomStrength', type: 'range', label: 'Сила свечения', min: 0, max: 1.5, step: 0.05, f: (v) => v.toFixed(2) },
-      { key: 'bloomRes', type: 'range', label: 'Разрешение свечения', min: 0.2, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Меньше — дешевле и мягче.' },
-      { key: 'antialias', type: 'toggle', label: 'Сглаживание (MSAA)', restart: 1 },
-      { key: 'debris', type: 'range', label: 'Количество обломков', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Физические осколки кирпичей и боссов.' },
-      { key: 'particles', type: 'range', label: 'Частицы (искры, дым, огонь)', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%' },
-      { key: 'weatherFx', type: 'range', label: 'Плотность погоды', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Только визуал — физика погоды работает всегда.' },
-      { key: 'envDetail', type: 'seg', label: 'Детали окружения', req: 1, options: [[0, 'ВЫКЛ'], [1, 'МАЛО'], [2, 'МНОГО']], hint: 'Деревья, здания, астероиды вокруг поля.' },
-      { key: 'dynLights', type: 'toggle', label: 'Динамический свет взрывов', req: 1 },
-      { key: 'trail', type: 'range', label: 'Шлейф шара', min: 0, max: 1, step: 0.1, f: (v) => (v ? Math.round(v * 100) + '%' : 'ВЫКЛ') },
-      { key: 'physicsRate', type: 'seg', label: 'Частота физики', options: [[60, '60 Гц'], [120, '120 Гц'], [240, '240 Гц']], hint: 'Выше — точнее столкновения, но дороже для CPU.' },
+      { key: 'renderScale', type: 'range', perf: 'more', label: 'Разрешение рендера', min: 0.4, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Главный рычаг FPS. 70% почти незаметно на телефоне.' },
+      { key: 'pixelRatioCap', type: 'seg', perf: ['Больше — чётче', 'меньше — быстрее'], label: 'Предел плотности пикселей', options: [[1, '1×'], [1.5, '1.5×'], [2, '2×'], [3, '3×']], hint: 'Ограничивает Retina/AMOLED-экраны, которые рисуют в 3× больше пикселей.' },
+      { key: 'fpsCap', type: 'seg', fps: 1, perf: ['Выше — плавнее', 'ниже — меньше нагрев и расход батареи'], label: 'Ограничение FPS', options: [[30, '30'], [45, '45'], [60, '60'], [90, '90'], [120, '120'], [0, '∞']], hint: 'Выше частоты экрана FPS не поднимется — такие варианты скрыты.' },
+      { key: 'adaptive', type: 'toggle', perf: ['Вкл — стабильнее FPS', 'выкл — постоянная чёткость'], label: 'Адаптивное разрешение', hint: 'Автоматически снижает разрешение при просадках FPS.' },
+      { key: 'adaptiveTarget', type: 'seg', perf: ['Выше — плавнее', 'ниже — чётче'], label: 'Целевой FPS адаптации', options: [[30, '30'], [45, '45'], [55, '55'], [60, '60']] },
+      { key: 'shadows', type: 'seg', perf: 'more', label: 'Тени', req: 1, options: [[0, 'ВЫКЛ'], [1, '512'], [2, '1024'], [3, '2048']], hint: 'Размер карты теней. Тяжело для мобильных GPU.' },
+      { key: 'materials', type: 'seg', perf: ['PBR — красивее', 'Простые — быстрее'], label: 'Материалы', req: 1, options: [['pbr', 'PBR + ОТРАЖЕНИЯ'], ['simple', 'ПРОСТЫЕ']], hint: 'Простые — Ламберт без карт окружения, в 2–3 раза дешевле.' },
+      { key: 'bloom', type: 'toggle', perf: 'on', label: 'Свечение (bloom)', hint: 'Пост-эффект свечения неона, огня и лазеров.' },
+      { key: 'bloomStrength', type: 'range', perf: ['Только вид', 'на скорость не влияет'], label: 'Сила свечения', min: 0, max: 1.5, step: 0.05, f: (v) => v.toFixed(2) },
+      { key: 'bloomRes', type: 'range', perf: ['Больше — чётче свечение', 'меньше — быстрее'], label: 'Разрешение свечения', min: 0.2, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Меньше — дешевле и мягче.' },
+      { key: 'aa', type: 'seg', perf: ['Сильнее — глаже края', 'слабее — быстрее'], label: 'Сглаживание', options: [['off', 'ВЫКЛ'], ['fxaa', 'FXAA'], ['msaa', 'MSAA 4×'], ['max', 'MSAA + FXAA']], hint: 'FXAA — почти бесплатный фильтр для слабых телефонов. MSAA — честное сглаживание геометрии, дороже. Применяется сразу.' },
+      { key: 'debris', type: 'range', perf: 'more', label: 'Количество обломков', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Физические осколки кирпичей и боссов.' },
+      { key: 'particles', type: 'range', perf: 'more', label: 'Частицы (искры, дым, огонь)', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%' },
+      { key: 'weatherFx', type: 'range', perf: 'more', label: 'Плотность погоды', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Только визуал — физика погоды работает всегда.' },
+      { key: 'envDetail', type: 'seg', perf: 'more', label: 'Детали окружения', req: 1, options: [[0, 'ВЫКЛ'], [1, 'МАЛО'], [2, 'МНОГО']], hint: 'Деревья, здания, астероиды вокруг поля.' },
+      { key: 'dynLights', type: 'toggle', perf: 'on', label: 'Динамический свет взрывов', req: 1 },
+      { key: 'trail', type: 'range', perf: ['Почти бесплатно', 'можно оставить'], label: 'Шлейф шара', min: 0, max: 1, step: 0.1, f: (v) => (v ? Math.round(v * 100) + '%' : 'ВЫКЛ') },
+      { key: 'physicsRate', type: 'seg', perf: ['Выше — точнее отскоки', 'ниже — меньше нагрузка на процессор'], label: 'Частота физики', options: [[60, '60 Гц'], [120, '120 Гц'], [240, '240 Гц']], hint: 'Выше — точнее столкновения, но дороже для CPU.' },
       { key: 'showFps', type: 'toggle', label: 'Показывать FPS' },
     ],
   },
@@ -300,7 +300,10 @@ export class UI {
     const row = el('div', 'set-row' + (it.type === 'toggle' ? ' inline' : '') + (it.wide ? ' wide' : ''));
     const mark = it.req ? ' <span class="req">*</span>' : it.restart ? ' <span class="req">↻</span>' : '';
     const val = it.type === 'range' ? `<span class="v">${it.f(settings[it.key])}</span>` : '';
-    const left = el('div', '', `<div class="sr-l">${it.label}${mark}${val}</div>${it.hint ? `<div class="sr-h">${it.hint}</div>` : ''}`);
+    const PERF = { more: ['Больше — красивее', 'меньше — быстрее'], on: ['Вкл — красивее', 'выкл — быстрее'] };
+    const pf = typeof it.perf === 'string' ? PERF[it.perf] : it.perf;
+    const perf = pf ? `<div class="sr-perf"><b>▲</b> ${pf[0]} <i>/</i> <b>▼</b> ${pf[1]}</div>` : '';
+    const left = el('div', '', `<div class="sr-l">${it.label}${mark}${val}</div>${perf}${it.hint ? `<div class="sr-h">${it.hint}</div>` : ''}`);
     row.appendChild(left);
     const commit = (v) => {
       if (it.key === 'preset') applyPreset(v); else setSetting(it.key, v);
@@ -326,7 +329,13 @@ export class UI {
       row.appendChild(t);
     } else if (it.type === 'seg') {
       const s = el('div', 'seg-ctl');
-      it.options.forEach(([v, l]) => {
+      let opts = it.options;
+      if (it.fps) {
+        // варианты выше частоты экрана бессмысленны — браузер всё равно не даст больше
+        const hz = this.app.renderer.refreshHz || 60;
+        opts = opts.filter(([v]) => v === 0 || v <= hz + 5);
+      }
+      opts.forEach(([v, l]) => {
         const b = el('button', String(settings[it.key]) === String(v) ? 'on' : '', l);
         b.addEventListener('click', () => { commit(v); this.buildSettings(); });
         s.appendChild(b);
@@ -482,7 +491,7 @@ export class UI {
     $('#fps').classList.toggle('hidden', !on);
     const txt = `${Math.round(v)} FPS`;
     if (on) $('#fps').textContent = txt + ` · ${Math.round(this.app.renderer.pixelRatio() * 100) / 100}x`;
-    $('#set-fps').textContent = txt;
+    if (this.current() === 'settings') $('#set-fps').textContent = `${txt} · ${this.app.renderer.info()}`;
   }
 
   // ——— Модальные ———

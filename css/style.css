@@ -265,6 +265,9 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 22px; background: var
 .set-row .sr-l { font-weight: 700; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
 .set-row .sr-l .v { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-left: auto; }
 .set-row .sr-h { font-size: 11px; color: var(--dim); line-height: 1.35; }
+.set-row .sr-perf { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--ink); opacity: 0.8; }
+.set-row .sr-perf b { color: var(--accent); font-weight: 600; font-size: 8px; }
+.set-row .sr-perf i { color: var(--faint); font-style: normal; margin: 0 2px; }
 .set-row .req { color: var(--accent); font-family: var(--mono); font-size: 11px; }
 .set-row.wide { grid-column: 1 / -1; }
 .set-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11px; }

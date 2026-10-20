@@ -1052,6 +1052,14 @@ export class Game {
 
   openWarp() {
     const f = this.field;
+    // одни врата за раз: старые гаснут, новые открываются на новом месте
+    if (this.warp) {
+      this.fx.ring(this.warp.x, this.warp.z, 2, '#e0c3ff', 0.4);
+      this.fx.sparksAt(this.warp.x, 0.4, this.warp.z, '#e0c3ff', 20, 4);
+      this.scene.remove(this.warp.g);
+      this.warp.g.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      this.warp = null;
+    }
     // место для портала — свободная клетка в зоне кирпичей
     const free = [];
     for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
@@ -1184,7 +1192,7 @@ export class Game {
     this.fx.shake(0.3);
     vibrate(60);
     p.flash = 0.6;
-    if (kind === 'freeze') { p.freeze = 2.5; this.ui.toast('ЗАМОРОЖЕНО', 'bad'); this.audio.glass(); return; }
+    if (kind === 'freeze') { p.freeze = 1.6; this.ui.toast('ЗАМОРОЖЕНО', 'bad'); this.audio.glass(); return; }
     p.stun = 0.45;
     this.expandLevel = Math.max(0, (this.expandLevel || 0) - 1);
     if (kind === 'ink') this.ui.ink();

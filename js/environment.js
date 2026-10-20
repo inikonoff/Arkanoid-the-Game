@@ -272,10 +272,10 @@ export class Environment {
     mk(railT, floorD + 0.5, -W / 2 - railT / 2, cz + 1.5);
     mk(railT, floorD + 0.5, W / 2 + railT / 2, cz + 1.5);
     mk(W + railT * 2, railT, 0, f.zTop - railT / 2);
-    const sGeoV = new THREE.BoxGeometry(0.08, 0.08, floorD + 0.3);
-    const sl = new THREE.Mesh(sGeoV, stripMat); sl.position.set(-W / 2 + 0.02, railH - 0.1, cz + 1.5);
-    const sr = sl.clone(); sr.position.x = W / 2 - 0.02;
-    const st = new THREE.Mesh(new THREE.BoxGeometry(W, 0.08, 0.08), stripMat); st.position.set(0, railH - 0.1, f.zTop + 0.02);
+    const sGeoV = new THREE.BoxGeometry(0.16, 0.12, floorD + 0.3);
+    const sl = new THREE.Mesh(sGeoV, stripMat); sl.position.set(-W / 2 + 0.06, railH - 0.1, cz + 1.5);
+    const sr = sl.clone(); sr.position.x = W / 2 - 0.06;
+    const st = new THREE.Mesh(new THREE.BoxGeometry(W, 0.12, 0.16), stripMat); st.position.set(0, railH - 0.1, f.zTop + 0.06);
     this.group.add(sl, sr, st);
     // опасная зона у нижнего края
     const danger = new THREE.Mesh(new THREE.PlaneGeometry(W, 0.12), glow('#ff3b2f', 1.2, { transparent: true, opacity: 0.5 }));

@@ -4,6 +4,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { settings } from './settings.js';
 
@@ -23,7 +25,9 @@ export class Renderer {
 
   create() {
     const r = new THREE.WebGLRenderer({
-      antialias: settings.antialias && !settings.bloom,
+      // сглаживание делаем сами (MSAA в буфере композитора + FXAA): мобильный Chrome
+      // часто игнорирует antialias холста, а так результат одинаковый везде и меняется без перезагрузки
+      antialias: false,
       powerPreference: 'high-performance',
       alpha: false,
       stencil: false,
@@ -51,24 +55,34 @@ export class Renderer {
   buildComposer() {
     if (this.composer) { this.composer.passes.forEach((p) => p.dispose?.()); this.composer.dispose(); this.composer.renderTarget1.dispose(); }
     this.composer = null;
-    if (!settings.bloom || !this.scene) return;
+    this.bloom = null;
+    this.fxaa = null;
+    const aa = settings.aa || 'off';
+    this.msaa = 0;
+    if (!this.scene || (!settings.bloom && aa === 'off')) return;
     const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
     const isGL2 = this.gl.capabilities.isWebGL2;
-    const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
-      type: THREE.HalfFloatType,
-      samples: settings.antialias && isGL2 ? 4 : 0,
-    });
+    const wantMsaa = (aa === 'msaa' || aa === 'max') && isGL2;
+    this.msaa = wantMsaa ? Math.min(4, this.gl.capabilities.maxSamples || 4) : 0;
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: this.msaa });
     const c = new EffectComposer(this.gl, rt);
     c.addPass(new RenderPass(this.scene, this.camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), settings.bloomStrength, 0.45, 1.0);
-    const origSet = bloom.setSize.bind(bloom);
-    bloom.setSize = (w, h) => {
-      const k = Math.max(0.2, settings.bloomRes * 2);
-      origSet(Math.max(32, Math.round(w * k)), Math.max(32, Math.round(h * k)));
-    };
-    c.addPass(bloom);
+    if (settings.bloom) {
+      const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), settings.bloomStrength, 0.45, 1.0);
+      const origSet = bloom.setSize.bind(bloom);
+      bloom.setSize = (w, h) => {
+        const k = Math.max(0.2, settings.bloomRes * 2);
+        origSet(Math.max(32, Math.round(w * k)), Math.max(32, Math.round(h * k)));
+      };
+      c.addPass(bloom);
+      this.bloom = bloom;
+    }
     c.addPass(new OutputPass());
-    this.bloom = bloom;
+    // FXAA — после тонмаппинга, в sRGB; на WebGL1 подменяет недоступный MSAA
+    if (aa === 'fxaa' || aa === 'max' || (aa === 'msaa' && !isGL2)) {
+      this.fxaa = new ShaderPass(FXAAShader);
+      c.addPass(this.fxaa);
+    }
     this.composer = c;
     this.resize();
   }
@@ -96,6 +110,7 @@ export class Renderer {
       this.composer.setPixelRatio(pr);
       this.composer.setSize(w, h);
     }
+    if (this.fxaa) this.fxaa.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     if (this.fieldBounds) this.fitCamera(this.fieldBounds);
@@ -149,7 +164,7 @@ export class Renderer {
   applySettings(keys) {
     const k = new Set(keys);
     if (k.has('shadows')) this.applyShadowSettings();
-    if (k.has('bloom') || k.has('antialias') || k.has('bloomRes')) this.buildComposer();
+    if (k.has('bloom') || k.has('aa') || k.has('bloomRes')) this.buildComposer();
     if (k.has('bloomStrength') && this.bloom) this.bloom.strength = settings.bloomStrength;
     if (k.has('renderScale') || k.has('pixelRatioCap') || k.has('bloomRes')) { this.dynScale = 1; this.resize(); }
     if (k.has('materials') && this.scene) this.scene.environment = settings.materials === 'pbr' ? this.envMap : null;
@@ -181,6 +196,25 @@ export class Renderer {
       this.lastResize = now; this.highRuns = 0;
       this.resize();
     }
+  }
+
+  // Частота обновления экрана по интервалам requestAnimationFrame
+  sampleRefresh(dtMs) {
+    if (this.refreshHz || dtMs <= 0 || dtMs > 100) return;
+    (this.rafSamples ||= []).push(dtMs);
+    if (this.rafSamples.length < 90) return;
+    const s = this.rafSamples.sort((a, b) => a - b);
+    // 10-й перцентиль: на тяжёлых кадрах интервалы кратны vsync, самые короткие показывают частоту экрана
+    const hz = Math.max(60, 1000 / s[Math.floor(s.length * 0.1)]);
+    const std = [30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240];
+    this.refreshHz = std.reduce((a, b) => (Math.abs(b - hz) < Math.abs(a - hz) ? b : a));
+  }
+
+  // Строка состояния для настроек: реальный буфер и сглаживание
+  info() {
+    const v = this.gl.getDrawingBufferSize(new THREE.Vector2());
+    const aa = [this.msaa ? `MSAA ${this.msaa}×` : '', this.fxaa ? 'FXAA' : ''].filter(Boolean).join(' + ') || 'без сглаживания';
+    return `буфер ${v.x}×${v.y} · ${aa}${this.refreshHz ? ` · экран ${this.refreshHz} Гц` : ''}`;
   }
 
   render() {

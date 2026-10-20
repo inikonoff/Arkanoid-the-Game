@@ -6,27 +6,27 @@ const KEY_PROFILE = 'kinetic.profile.v1';
 export const PRESETS = {
   ultra: {
     renderScale: 1, pixelRatioCap: 2, shadows: 3, materials: 'pbr', bloom: true, bloomStrength: 0.85,
-    bloomRes: 0.5, antialias: true, debris: 1, particles: 1, weatherFx: 1, envDetail: 2, dynLights: true,
+    bloomRes: 0.5, aa: 'max', debris: 1, particles: 1, weatherFx: 1, envDetail: 2, dynLights: true,
     trail: 1, physicsRate: 240, fpsCap: 0,
   },
   high: {
     renderScale: 1, pixelRatioCap: 2, shadows: 2, materials: 'pbr', bloom: true, bloomStrength: 0.75,
-    bloomRes: 0.5, antialias: true, debris: 0.7, particles: 0.8, weatherFx: 0.8, envDetail: 2, dynLights: true,
+    bloomRes: 0.5, aa: 'max', debris: 0.7, particles: 0.8, weatherFx: 0.8, envDetail: 2, dynLights: true,
     trail: 0.8, physicsRate: 120, fpsCap: 0,
   },
   medium: {
     renderScale: 0.85, pixelRatioCap: 1.5, shadows: 1, materials: 'pbr', bloom: true, bloomStrength: 0.6,
-    bloomRes: 0.35, antialias: false, debris: 0.45, particles: 0.55, weatherFx: 0.55, envDetail: 1, dynLights: true,
+    bloomRes: 0.35, aa: 'fxaa', debris: 0.45, particles: 0.55, weatherFx: 0.55, envDetail: 1, dynLights: true,
     trail: 0.5, physicsRate: 120, fpsCap: 60,
   },
   low: {
     renderScale: 0.7, pixelRatioCap: 1, shadows: 0, materials: 'simple', bloom: false, bloomStrength: 0.5,
-    bloomRes: 0.25, antialias: false, debris: 0.25, particles: 0.3, weatherFx: 0.3, envDetail: 1, dynLights: false,
+    bloomRes: 0.25, aa: 'fxaa', debris: 0.25, particles: 0.3, weatherFx: 0.3, envDetail: 1, dynLights: false,
     trail: 0.3, physicsRate: 120, fpsCap: 60,
   },
   potato: {
     renderScale: 0.5, pixelRatioCap: 1, shadows: 0, materials: 'simple', bloom: false, bloomStrength: 0.5,
-    bloomRes: 0.25, antialias: false, debris: 0.08, particles: 0.12, weatherFx: 0.12, envDetail: 0, dynLights: false,
+    bloomRes: 0.25, aa: 'off', debris: 0.08, particles: 0.12, weatherFx: 0.12, envDetail: 0, dynLights: false,
     trail: 0, physicsRate: 60, fpsCap: 60,
   },
 };
@@ -49,7 +49,7 @@ export const DEFAULTS = {
 
 // Какие ключи требуют пересборки сцены / перезапуска рендерера.
 export const REBUILD_KEYS = new Set(['shadows', 'materials', 'envDetail', 'debris', 'particles', 'weatherFx', 'dynLights']);
-export const RESTART_KEYS = new Set(['antialias']);
+export const RESTART_KEYS = new Set();
 
 function load(key, fallback) {
   try {
@@ -95,6 +95,12 @@ export const settings = load(KEY_SETTINGS, DEFAULTS);
 if (!settings._v2) {
   if (settings.preset === 'potato' && settings.fpsCap === 30) settings.fpsCap = 60;
   settings._v2 = true;
+  save(KEY_SETTINGS, settings);
+}
+// миграция: булево antialias → режим сглаживания
+if ('antialias' in settings) {
+  settings.aa = settings.antialias ? 'max' : (settings.preset === 'potato' ? 'off' : 'fxaa');
+  delete settings.antialias;
   save(KEY_SETTINGS, settings);
 }
 if (settings.preset === 'auto' && !settings._autoApplied) {
