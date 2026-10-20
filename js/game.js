@@ -115,6 +115,7 @@ export class Game {
     this.expandLevel = 0;
     this.acc = 0;
     this.catchT = 0;
+    this.won = false;
 
     // сетка
     let grid = level.grid.slice();
@@ -584,6 +585,20 @@ export class Game {
       if (b.stuck) {
         b.x = p.x + b.stuckOff;
         b.z = p.z - PADDLE_D - b.r;
+        continue;
+      }
+      if (this.won) {
+        // победа: шар плавно тормозит до полной остановки — потерять его уже нельзя
+        const s0 = Math.hypot(b.vx, b.vz);
+        const s1 = Math.max(0, s0 * Math.exp(-2.2 * h) - 1.5 * h);
+        if (s0 > 0) { b.vx *= s1 / s0; b.vz *= s1 / s0; }
+        b.x += b.vx * h; b.z += b.vz * h;
+        const hw0 = f.W / 2;
+        if (b.x < -hw0 + b.r) { b.x = -hw0 + b.r; b.vx = Math.abs(b.vx); }
+        else if (b.x > hw0 - b.r) { b.x = hw0 - b.r; b.vx = -Math.abs(b.vx); }
+        if (b.z < f.zTop + b.r) { b.z = f.zTop + b.r; b.vz = Math.abs(b.vz); }
+        if (b.z > p.z - PADDLE_D - b.r) { b.z = p.z - PADDLE_D - b.r; b.vz = -Math.abs(b.vz) * 0.5; }
+        if (s1 > 0.5) this.collideBricks(b);
         continue;
       }
       this.weather.force(b, h);
@@ -1209,6 +1224,7 @@ export class Game {
 
   loseBall(b) {
     this.removeBall(b);
+    if (this.won) return;
     if (this.balls.length > 0 || this.state !== 'play') return;
     if (this.level.bonus) { this.newBall(true); this.state = 'ready'; return; }
     this.lostBall = true;
@@ -1238,6 +1254,7 @@ export class Game {
   }
 
   onBossDying() {
+    this.won = true;
     this.slowmo = 1.6;
     this.audio.bossRoar();
     this.ui.toast('КРИТИЧЕСКИЙ УРОН', 'boss');
@@ -1272,6 +1289,7 @@ export class Game {
   levelClear() {
     if (this.state === 'clear' || this.state === 'over' || this.state === 'warp') return;
     this.state = 'clear';
+    this.won = true;
     this.slowmo = Math.max(this.slowmo, 0.9);
     this.audio.clear();
     for (const b of this.balls) { b.stuck = false; }
