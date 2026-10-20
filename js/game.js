@@ -455,6 +455,8 @@ export class Game {
     const list = base.slice(0, 6);
     for (const s of list) for (let i = 0; i < n; i++) {
       if (s.stuck) { s.stuck = false; const sp = this.speedTarget(); s.vx = 0; s.vz = -sp; }
+      // шары оторвались от ракетки — это уже полноценная игра, а не ожидание запуска
+      if (this.state === 'ready') this.state = 'play';
       const nb = this.newBall(false, s);
       if (nb) { nb.fire = s.fire; }
     }
@@ -481,7 +483,11 @@ export class Game {
       this.introT -= dt;
       if (this.introT <= 0) this.state = 'ready';
     }
-    if (this.state === 'play' || this.state === 'ready') this.levelTime += sdt;
+    if (this.state === 'play' || this.state === 'ready') {
+      this.levelTime += sdt;
+      // страховка: шаров не осталось, а уровень не выигран — жизнь теряется в любом случае
+      if (!this.won && this.balls.length === 0) this.allBallsLost();
+    }
 
     this.updatePaddle(sdt);
     if (this.state === 'play' || this.state === 'ready' || this.state === 'intro') {
@@ -1224,8 +1230,12 @@ export class Game {
 
   loseBall(b) {
     this.removeBall(b);
-    if (this.won) return;
-    if (this.balls.length > 0 || this.state !== 'play') return;
+    if (this.won || this.balls.length > 0) return;
+    this.allBallsLost();
+  }
+
+  allBallsLost() {
+    if (this.won || this.balls.length > 0 || (this.state !== 'play' && this.state !== 'ready')) return;
     if (this.level.bonus) { this.newBall(true); this.state = 'ready'; return; }
     this.lostBall = true;
     this.run.lives--;
