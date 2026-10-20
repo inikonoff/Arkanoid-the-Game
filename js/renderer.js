@@ -77,6 +77,8 @@ export class Renderer {
     this.scene = scene;
     if (scene && settings.materials === 'pbr') scene.environment = this.envMap;
     this.buildComposer();
+    // компилируем шейдеры заранее, чтобы не было фризов при первом появлении объектов
+    if (scene) { try { this.gl.compile(scene, this.camera); } catch (e) { /* ignore */ } }
   }
 
   pixelRatio() {
@@ -155,22 +157,28 @@ export class Renderer {
 
   // Адаптивное разрешение: понижаем при просадке FPS, возвращаем при запасе.
   adapt(now, dt) {
-    this.fpsSamples.push(dt);
-    if (now - this.lastAdapt < 1500) return;
+    this.fpsAcc = (this.fpsAcc || 0) + dt;
+    this.fpsN = (this.fpsN || 0) + 1;
+    if (now - this.lastAdapt < 1000) return;
     this.lastAdapt = now;
-    const n = this.fpsSamples.length;
-    if (!n) return;
-    const avg = this.fpsSamples.reduce((a, b) => a + b, 0) / n;
-    this.fpsSamples.length = 0;
-    this.fps = 1 / avg;
+    if (!this.fpsN) return;
+    this.fps = this.fpsN / this.fpsAcc;
+    this.fpsAcc = 0; this.fpsN = 0;
     if (!settings.adaptive) { if (this.dynScale !== 1) { this.dynScale = 1; this.resize(); } return; }
+    // смена разрешения пересоздаёт буферы — делаем это редко и с гистерезисом
     const cap = settings.fpsCap || 240;
     const target = Math.min(settings.adaptiveTarget, cap - 4);
-    if (this.fps < target - 4 && this.dynScale > 0.5) {
-      this.dynScale = Math.max(0.5, this.dynScale - 0.1);
+    this.lowRuns = this.fps < target - 5 ? (this.lowRuns || 0) + 1 : 0;
+    this.highRuns = this.fps > target + 4 ? (this.highRuns || 0) + 1 : 0;
+    if (now - (this.lastResize || 0) < 3000) return;
+    if (this.lowRuns >= 2 && this.dynScale > 0.5) {
+      this.dynScale = Math.max(0.5, this.dynScale - 0.15);
+      this.lastResize = now; this.lowRuns = 0; this.highRuns = 0;
+      this.dropped = now;
       this.resize();
-    } else if (this.fps > target + 6 && this.fps < cap + 20 && this.dynScale < 1) {
-      this.dynScale = Math.min(1, this.dynScale + 0.05);
+    } else if (this.highRuns >= 4 && this.dynScale < 1 && now - (this.dropped || 0) > 10000) {
+      this.dynScale = Math.min(1, this.dynScale + 0.1);
+      this.lastResize = now; this.highRuns = 0;
       this.resize();
     }
   }

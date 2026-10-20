@@ -1,10 +1,10 @@
 // Service worker: офлайн-кэш всех ресурсов игры + кэш шрифтов Google.
-const VERSION = 'kinetic-v1.0.0';
+const VERSION = 'kinetic-v1.1.0';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './js/main.js', './js/settings.js', './js/renderer.js', './js/audio.js', './js/ui.js', './js/game.js',
   './js/input.js', './js/levels.js', './js/generator.js', './js/locations.js', './js/environment.js',
-  './js/weather.js', './js/fx.js', './js/boss.js', './js/mat.js', './js/textures.js',
+  './js/weather.js', './js/fx.js', './js/boss.js', './js/mat.js', './js/textures.js', './js/brickphys.js',
   './vendor/three/three.module.min.js',
   './vendor/three/addons/postprocessing/EffectComposer.js', './vendor/three/addons/postprocessing/RenderPass.js',
   './vendor/three/addons/postprocessing/UnrealBloomPass.js', './vendor/three/addons/postprocessing/OutputPass.js',

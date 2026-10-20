@@ -12,7 +12,7 @@ const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const SET_SCHEMA = [
   {
     id: 'gfx', label: 'ГРАФИКА', items: [
-      { key: 'preset', type: 'seg', label: 'Пресет качества', wide: true, options: [['auto', 'АВТО'], ['ultra', 'УЛЬТРА'], ['high', 'ВЫСОКО'], ['medium', 'СРЕДНЕ'], ['low', 'НИЗКО'], ['potato', 'КАРТОШКА']], hint: '«Картошка» — для самых слабых телефонов: 30 FPS, без теней и пост-эффектов.' },
+      { key: 'preset', type: 'seg', label: 'Пресет качества', wide: true, options: [['auto', 'АВТО'], ['ultra', 'УЛЬТРА'], ['high', 'ВЫСОКО'], ['medium', 'СРЕДНЕ'], ['low', 'НИЗКО'], ['potato', 'КАРТОШКА']], hint: '«Картошка» — для самых слабых телефонов: низкое разрешение, без теней, пост-эффектов и реверба.' },
       { key: 'renderScale', type: 'range', label: 'Разрешение рендера', min: 0.4, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Главный рычаг FPS. 70% почти незаметно на телефоне.' },
       { key: 'pixelRatioCap', type: 'seg', label: 'Предел плотности пикселей', options: [[1, '1×'], [1.5, '1.5×'], [2, '2×'], [3, '3×']], hint: 'Ограничивает Retina/AMOLED-экраны, которые рисуют в 3× больше пикселей.' },
       { key: 'fpsCap', type: 'seg', label: 'Ограничение FPS', options: [[30, '30'], [45, '45'], [60, '60'], [90, '90'], [120, '120'], [0, '∞']], hint: '30 FPS экономит батарею и греет телефон меньше.' },
@@ -387,7 +387,8 @@ export class UI {
       set('bossName', boss.name, (v) => { $('#h-boss-name').textContent = v; });
       set('bossHp', Math.ceil(boss.ratio * 100), (v) => { $('#h-boss-hp').textContent = v + '%'; $('#h-boss-fill').style.transform = `scaleX(${boss.ratio})`; });
     }
-    // эффекты
+    // эффекты (раз в 6 кадров — меньше аллокаций и работы с DOM)
+    if ((c.effTick = (c.effTick || 0) + 1) % 6 !== 0) return;
     const effs = [];
     for (const [k, t] of Object.entries(game.effects)) if (t > 0 && POWERUPS[k]?.dur) effs.push([k, t]);
     if (game.shield > 0) effs.push(['shield', game.effects.shield || 1, `ЩИТ ×${game.shield}`]);
@@ -398,13 +399,11 @@ export class UI {
       c.effKey = key;
       box.innerHTML = effs.map(([k, , label]) => `<span class="eff${POWERUPS[k].good ? '' : ' bad'}" data-k="${k}" style="--c:${POWERUPS[k].color}">${label || POWERUPS[k].label}<i></i></span>`).join('');
     }
-    if ((c.effTick = (c.effTick || 0) + 1) % 6 === 0) {
-      box.querySelectorAll('.eff').forEach((e) => {
-        const k = e.dataset.k, d = POWERUPS[k].dur;
-        const t = game.effects[k] || 0;
-        e.querySelector('i').style.width = d ? `${Math.max(0, t / d) * 100}%` : '100%';
-      });
-    }
+    box.querySelectorAll('.eff').forEach((e) => {
+      const k = e.dataset.k, d = POWERUPS[k].dur;
+      const t = game.effects[k] || 0;
+      e.querySelector('i').style.transform = `scaleX(${d ? Math.max(0, t / d) : 1})`;
+    });
   }
 
   resetHud() { this.hudCache = {}; }
@@ -471,8 +470,11 @@ export class UI {
 
   flash(v) {
     const f = $('#flash');
+    f.style.display = 'block';
     f.style.transition = 'none'; f.style.opacity = String(v);
     requestAnimationFrame(() => { f.style.transition = 'opacity 0.4s'; f.style.opacity = '0'; });
+    clearTimeout(this.flashT);
+    this.flashT = setTimeout(() => { f.style.display = 'none'; }, 450);
   }
 
   fps(v) {

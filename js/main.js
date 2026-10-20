@@ -321,7 +321,15 @@ async function boot() {
     bootText.style.color = '#ff4d5e';
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // новая версия игры: как только свежий service worker взял управление — перезагружаемся один раз
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
   }
 }
 

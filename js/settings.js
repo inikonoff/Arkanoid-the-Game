@@ -27,7 +27,7 @@ export const PRESETS = {
   potato: {
     renderScale: 0.5, pixelRatioCap: 1, shadows: 0, materials: 'simple', bloom: false, bloomStrength: 0.5,
     bloomRes: 0.25, antialias: false, debris: 0.08, particles: 0.12, weatherFx: 0.12, envDetail: 0, dynLights: false,
-    trail: 0, physicsRate: 60, fpsCap: 30,
+    trail: 0, physicsRate: 60, fpsCap: 60,
   },
 };
 
@@ -76,8 +76,11 @@ export function detectPreset() {
     const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
     if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
   } catch (e) { /* ignore */ }
-  const weakGpu = /Mali-4|Mali-T|Adreno \(TM\) [2-5]\d\d|PowerVR SGX|Intel\(R\) HD Graphics [2-5]|SwiftShader|llvmpipe/i.test(gpu);
+  // PowerVR GE8xxx (Helio G25/G35/P35 — Honor X6, Redmi 9A…), Mali-4xx/T/G31/G51/G52 MC1, старые Adreno
+  const weakGpu = /Mali-4|Mali-T|Mali-G3\d|Mali-G51|Mali-G52 MC1|Adreno \(TM\) [2-5]\d\d|Adreno \(TM\) 6[01]\d|PowerVR SGX|PowerVR Rogue GE|PowerVR Rogue G6|GE8\d{3}|Intel\(R\) HD Graphics [2-5]|SwiftShader|llvmpipe/i.test(gpu);
+  const midGpu = /Mali-G52|Mali-G57 MC[1-2]|Adreno \(TM\) 6[1-2]\d|PowerVR Rogue GM|PowerVR B-Series/i.test(gpu);
   if (weakGpu || mem <= 2 || cores <= 2) return 'potato';
+  if (mobile && midGpu) return 'low';
   if (mobile) {
     if (mem <= 4 || cores <= 4) return 'low';
     return 'medium';
@@ -88,6 +91,12 @@ export function detectPreset() {
 }
 
 export const settings = load(KEY_SETTINGS, DEFAULTS);
+// миграция: раньше «Картошка» была ограничена 30 FPS
+if (!settings._v2) {
+  if (settings.preset === 'potato' && settings.fpsCap === 30) settings.fpsCap = 60;
+  settings._v2 = true;
+  save(KEY_SETTINGS, settings);
+}
 if (settings.preset === 'auto' && !settings._autoApplied) {
   Object.assign(settings, PRESETS[detectPreset()], { _autoApplied: true });
   save(KEY_SETTINGS, settings);

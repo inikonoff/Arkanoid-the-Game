@@ -36,6 +36,9 @@ export class Audio {
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     // реверб из шума
+    // на слабых устройствах свёрточный реверб слишком дорог для аудиопотока
+    this.lite = settings.materials === 'simple' || settings.preset === 'potato' || settings.preset === 'low';
+    if (this.lite) { this.verb = c.createGain(); this.applyVolumes(); return; }
     this.verb = c.createConvolver();
     const ir = c.createBuffer(2, c.sampleRate * 2, c.sampleRate);
     for (let ch = 0; ch < 2; ch++) {

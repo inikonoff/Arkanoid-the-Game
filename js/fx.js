@@ -205,10 +205,12 @@ export class Particles {
 
   update(dt, viewportH) {
     this.mat.uniforms.scale.value = viewportH * 0.9;
+    let any = false;
     for (let i = 0; i < this.cap; i++) {
       const i3 = i * 3, i4 = i * 4;
       if (this.life[i] <= 0) { if (this.col[i4 + 3] !== 0) { this.col[i4 + 3] = 0; this.size[i] = 0; } continue; }
       this.life[i] -= dt;
+      any = true;
       const k = Math.max(0, 1 - this.drag[i] * dt);
       this.vel[i3] *= k; this.vel[i3 + 1] = this.vel[i3 + 1] * k - this.grav[i] * dt; this.vel[i3 + 2] *= k;
       this.pos[i3] += this.vel[i3] * dt; this.pos[i3 + 1] += this.vel[i3 + 1] * dt; this.pos[i3 + 2] += this.vel[i3 + 2] * dt;
@@ -217,6 +219,9 @@ export class Particles {
       this.col[i4 + 3] = this.alpha0[i] * Math.min(1, t * 2.2);
       this.size[i] = this.base[i] * (1 + this.grow[i] * (1 - t));
     }
+    // нет живых частиц — не гоняем буферы в GPU
+    if (!any && !this.wasAny) return;
+    this.wasAny = any;
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.pcolor.needsUpdate = true;
     this.geo.attributes.size.needsUpdate = true;

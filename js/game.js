@@ -10,6 +10,7 @@ import { Boss, BOSSES } from './boss.js';
 import { mat, glow } from './mat.js';
 import { powerupLabel } from './textures.js';
 import { vibrate } from './audio.js';
+import { BrickWorld } from './brickphys.js';
 
 export const CELL_W = 1.5;
 export const CELL_D = 0.75;
@@ -17,6 +18,7 @@ const BRICK_W = 1.38, BRICK_D = 0.6, BRICK_H = 0.62;
 const BALL_R = 0.3;
 const PADDLE_HALF = 1.7, PADDLE_D = 0.3;
 const MAX_BALLS = 24;
+const BALL_MASS = 0.75;
 
 export const POWERUPS = {
   expand: { label: 'ШИРЕ', color: '#3c8dff', good: true, w: 14, dur: 20 },
@@ -46,6 +48,8 @@ const TYPE = {
 };
 
 const _o = new THREE.Object3D();
+_o.rotation.order = 'YXZ';
+const _ct = {}, _cb = {};
 const _v = new THREE.Vector3();
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
@@ -156,6 +160,10 @@ export class Game {
     const li = run.levelIndex || 0;
     this.baseSpeed = Math.min(19, 12.5 + li * 0.28) * (level.mods?.speedMul || 1) * (this.chaos.speed || 1) * scale;
     this.renderer.fitCamera({ minX: -W / 2 - 0.6, maxX: W / 2 + 0.6, minZ: f.zTop - 0.5, maxZ: f.zBottom + 0.3 });
+    // прогрев шейдера капсулы бонуса (иначе компиляция при первом выпадении)
+    const warm = new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), new THREE.MeshBasicMaterial({ map: label('expand') }));
+    warm.position.set(0, -60, 0);
+    scene.add(warm);
     this.renderer.setScene(scene);
     this.camT = 0;
     this.introT = 1.6;
@@ -169,7 +177,6 @@ export class Game {
 
   buildBricks(grid) {
     const f = this.field, pal = this.loc.bricks;
-    this.bricks = new Array(f.cols * f.rows).fill(null);
     this.brickList = [];
     this.portals = [];
     const counts = { std: 40, metal: 4, glass: 4, glow: 4 };
@@ -190,7 +197,6 @@ export class Game {
           wy: 0, wvy: 0, wrx: 0, wvrx: 0, wrz: 0, wvrz: 0, appear: 1, regenT: 0,
         };
         b.base = b.color.clone();
-        this.bricks[b.i] = b;
         this.brickList.push(b);
         counts[b.cat]++;
       }
@@ -221,6 +227,9 @@ export class Game {
       this.scene.add(m);
       this.brickMeshes[cat] = m;
     }
+    const f2 = this.field;
+    this.world = new BrickWorld({ minX: -f2.W / 2, maxX: f2.W / 2, minZ: f2.zTop, maxZ: f2.paddleZ - 3 });
+    for (const b of this.brickList) this.world.add(b);
     for (const b of this.brickList) this.assignInstance(b);
     this.wobbling = new Set();
     this.explosionQueue = [];
@@ -245,7 +254,7 @@ export class Game {
     if (!b.alive || (b.hidden && !b.revealed)) { m.setMatrixAt(b.inst, ZERO); m.instanceMatrix.needsUpdate = true; return; }
     const s = b.appear;
     _o.position.set(b.x, BRICK_H / 2 + b.wy, b.z);
-    _o.rotation.set(b.wrx, 0, b.wrz);
+    _o.rotation.set(b.wrx, -b.a, b.wrz);
     _o.scale.set(s, s, s);
     _o.updateMatrix();
     m.setMatrixAt(b.inst, _o.matrix);
@@ -418,7 +427,15 @@ export class Game {
       this.updatePowerups(sdt);
       this.updateLasers(sdt);
     }
-    if (this.boss && this.boss.alive) this.boss.update(sdt);
+    if (this.boss && this.boss.alive) {
+      this.boss.update(sdt);
+      this.bossPush(sdt);
+    }
+    // обновляем матрицы сдвинутых кирпичей
+    if (this.world.moved.size) {
+      for (const b of this.world.moved) if (!this.wobbling.has(b)) this.writeBrick(b);
+      this.world.moved.clear();
+    }
     this.weather.update(sdt);
     this.updateExplosions(sdt);
     this.updateBricks(sdt);
@@ -488,6 +505,7 @@ export class Game {
 
   physicsStep(h) {
     const f = this.field, p = this.paddle;
+    this.world.step(h);
     const target = this.speedTarget();
     for (let i = this.balls.length - 1; i >= 0; i--) {
       const b = this.balls[i];
@@ -560,6 +578,22 @@ export class Game {
     }
   }
 
+  // Босс и его орбитали расталкивают кирпичи, не получая урона
+  bossPush(dt) {
+    const B = this.boss;
+    if (B.dying || B.visible < 0.5 || dt <= 0) return;
+    const W = this.world;
+    const vx = (B.x - (B._px ?? B.x)) / dt, vz = (B.z - (B._pz ?? B.z)) / dt;
+    B._px = B.x; B._pz = B.z;
+    W.pushCircle(B.x, B.z, B.r + 0.1, vx, vz);
+    for (const o of B.orbiters) {
+      if (!o.alive) continue;
+      const ovx = (o.x - (o._px ?? o.x)) / dt, ovz = (o.z - (o._pz ?? o.z)) / dt;
+      o._px = o.x; o._pz = o.z;
+      W.pushCircle(o.x, o.z, o.r + 0.1, ovx, ovz);
+    }
+  }
+
   wallHit(b) {
     if (this.time - (b.lastWall || 0) > 0.05) { this.audio.wall(); b.lastWall = this.time; }
   }
@@ -588,46 +622,35 @@ export class Game {
   }
 
   collideBricks(b) {
-    const f = this.field;
-    const c0 = Math.max(0, Math.floor((b.x - b.r - f.ox) / CELL_W));
-    const c1 = Math.min(f.cols - 1, Math.floor((b.x + b.r - f.ox) / CELL_W));
-    const r0 = Math.max(0, Math.floor((b.z - b.r - f.brickTop) / CELL_D));
-    const r1 = Math.min(f.rows - 1, Math.floor((b.z + b.r - f.brickTop) / CELL_D));
-    if (c1 < c0 || r1 < r0) return;
-    let best = null, bestPen = 0, bnx = 0, bnz = 0;
-    const hw = BRICK_W / 2 + 0.03, hd = BRICK_D / 2 + 0.03;
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-      const br = this.bricks[r * f.cols + c];
-      if (!br || !br.alive) continue;
-      const cx = THREE.MathUtils.clamp(b.x, br.x - hw, br.x + hw);
-      const cz = THREE.MathUtils.clamp(b.z, br.z - hd, br.z + hd);
-      let dx = b.x - cx, dz = b.z - cz;
-      const d2 = dx * dx + dz * dz;
-      if (d2 >= b.r * b.r) continue;
-      let nx, nz, pen;
-      if (d2 < 1e-9) {
-        // центр внутри — выталкиваем по оси наименьшего проникновения
-        const px = hw - Math.abs(b.x - br.x), pz = hd - Math.abs(b.z - br.z);
-        if (px < pz) { nx = Math.sign(b.x - br.x) || 1; nz = 0; pen = px + b.r; }
-        else { nx = 0; nz = Math.sign(b.z - br.z) || 1; pen = pz + b.r; }
-      } else {
-        const d = Math.sqrt(d2);
-        nx = dx / d; nz = dz / d; pen = b.r - d;
+    const W = this.world;
+    const list = W.query(b.x, b.z, b.r);
+    if (!list.length) return;
+    let best = null, bestPen = 0;
+    for (const br of list) {
+      if (W.circle(br, b.x, b.z, b.r + 0.03, _ct) && _ct.pen > bestPen) {
+        bestPen = _ct.pen; best = br;
+        _cb.nx = _ct.nx; _cb.nz = _ct.nz; _cb.px = _ct.px; _cb.pz = _ct.pz;
       }
-      if (pen > bestPen) { bestPen = pen; best = br; bnx = nx; bnz = nz; }
     }
     if (!best) return;
+    const bnx = _cb.nx, bnz = _cb.nz;
     const pierce = b.fire && !best.steel;
+    const vx0 = b.vx, vz0 = b.vz;
     if (!pierce) {
       b.x += bnx * bestPen; b.z += bnz * bestPen;
-      const vn = b.vx * bnx + b.vz * bnz;
+      // отражение относительно скорости точки кирпича
+      const rx = _cb.px - best.x, rz = _cb.pz - best.z;
+      const vpx = best.vx - best.w * rz, vpz = best.vz + best.w * rx;
+      const vn = (b.vx - vpx) * bnx + (b.vz - vpz) * bnz;
       if (vn < 0) { b.vx -= 2 * vn * bnx; b.vz -= 2 * vn * bnz; }
       // небольшая случайность против зацикливания
       const s = Math.hypot(b.vx, b.vz), a = Math.atan2(b.vz, b.vx) + (Math.random() - 0.5) * 0.03;
       b.vx = Math.cos(a) * s; b.vz = Math.sin(a) * s;
     }
-    // вобл кирпича от удара (кинетика)
-    best.wvy += 1.2; best.wvrx += -bnz * 2.5 + (Math.random() - 0.5); best.wvrz += bnx * 2.5;
+    // импульс кирпичу: удар сбоку закручивает, по центру — отталкивает
+    W.hitByBall(best, BALL_MASS, vx0, vz0, bnx, bnz, _cb.px, _cb.pz);
+    // небольшой визуальный подскок
+    best.wvy += 0.8; best.wvrx += -bnz * 1.5; best.wvrz += bnx * 1.5;
     this.wobbling.add(best);
     if (b.mega && !best.steel) {
       b.mega = false;
@@ -667,6 +690,7 @@ export class Game {
 
   destroyBrick(b, src = {}) {
     b.alive = false;
+    this.world.remove(b);
     this.writeBrick(b);
     this.remaining--;
     this.bricksBroken++;
@@ -676,8 +700,9 @@ export class Game {
     this.fx.shatter(b.x, b.z, b.color, kind, src.nx || 0, src.nz || 0);
     if (kind === 'glass') this.audio.glass(); else this.audio.brick(b.maxHp, this.combo);
     vibrate(kind === 'metal' ? 14 : 6);
-    // волна по соседям
+    // волна по соседям: визуальный подскок + реальный толчок
     this.pushNeighbors(b.x, b.z, 2.2, 1.2);
+    this.world.blast(b.x, b.z, 2.2, 1.1);
     let pts = 50 * Math.min(5, b.maxHp);
     if (b.gold) { pts = 500; this.fx.sparksAt(b.x, 0.6, b.z, '#ffd75e', 30, 6, { size: 0.22, life: 0.8 }); }
     if (b.secret) pts = 1000;
@@ -691,12 +716,8 @@ export class Game {
   }
 
   pushNeighbors(x, z, radius, strength) {
-    const f = this.field;
-    const c0 = Math.max(0, Math.floor((x - radius - f.ox) / CELL_W)), c1 = Math.min(f.cols - 1, Math.floor((x + radius - f.ox) / CELL_W));
-    const r0 = Math.max(0, Math.floor((z - radius - f.brickTop) / CELL_D)), r1 = Math.min(f.rows - 1, Math.floor((z + radius - f.brickTop) / CELL_D));
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-      const br = this.bricks[r * f.cols + c];
-      if (!br || !br.alive) continue;
+    const list = this.world.query(x, z, radius);
+    for (const br of list) {
       const dx = br.x - x, dz = br.z - z, d = Math.hypot(dx, dz);
       if (d > radius || d < 0.01) continue;
       const k = strength * (1 - d / radius);
@@ -736,10 +757,12 @@ export class Game {
       if (b.regen && !b.alive && b.regenT > 0 && this.state === 'play') {
         b.regenT -= dt;
         if (b.regenT <= 0) {
-          const blocked = this.balls.some((q) => Math.abs(q.x - b.x) < BRICK_W && Math.abs(q.z - b.z) < BRICK_D + q.r);
+          const blocked = this.balls.some((q) => Math.abs(q.x - b.homeX) < BRICK_W && Math.abs(q.z - b.homeZ) < BRICK_D + q.r)
+            || this.world.query(b.homeX, b.homeZ, 0.2).some((o) => o !== b && this.world.inside(o, b.homeX, b.homeZ, 0.4));
           if (blocked) b.regenT = 0.5;
           else {
             b.alive = true; b.hp = b.maxHp; b.appear = 0.05;
+            this.world.respawn(b);
             this.remaining++;
             this.wobbling.add(b);
             this.fx.sparksAt(b.x, 0.4, b.z, '#7cff9b', 16, 3);
@@ -755,12 +778,8 @@ export class Game {
 
   // верх твёрдого кирпича в точке (для укладки обломков)
   solidTop = (x, z) => {
-    const f = this.field;
-    const c = Math.floor((x - f.ox) / CELL_W), r = Math.floor((z - f.brickTop) / CELL_D);
-    if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) return 0;
-    const b = this.bricks[r * f.cols + c];
-    if (!b || !b.alive || (b.hidden && !b.revealed)) return 0;
-    if (Math.abs(x - b.x) > BRICK_W / 2 || Math.abs(z - b.z) > BRICK_D / 2) return 0;
+    const b = this.world.brickAt(x, z);
+    if (!b || (b.hidden && !b.revealed)) return 0;
     return BRICK_H + b.wy;
   };
 
@@ -779,20 +798,17 @@ export class Game {
     this.fx.explode(x, z, power, '#ff7a2f');
     this.audio.explosion(power);
     vibrate(30);
-    const f = this.field;
     const R = radius * power;
-    const c0 = Math.max(0, Math.floor((x - R - f.ox) / CELL_W)), c1 = Math.min(f.cols - 1, Math.floor((x + R - f.ox) / CELL_W));
-    const r0 = Math.max(0, Math.floor((z - R - f.brickTop) / CELL_D)), r1 = Math.min(f.rows - 1, Math.floor((z + R - f.brickTop) / CELL_D));
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-      const b = this.bricks[r * f.cols + c];
-      if (!b || !b.alive) continue;
-      const d = Math.hypot((b.x - x) / CELL_W, (b.z - z) / (CELL_D * 1.6));
-      if (d > R / CELL_W + 0.2) continue;
+    const hits = this.world.query(x, z, R).slice();
+    for (const b of hits) {
+      if (!b.alive) continue;
+      const d = Math.hypot(b.x - x, (b.z - z) * 1.25);
+      if (d > R + 0.3) continue;
       if (b.steel) continue;
       if (b.hidden && !b.revealed) b.revealed = true;
       if (b.explosive) {
         // цепная реакция с задержкой — каскад
-        b.hp = 0; b.alive = false; this.writeBrick(b); this.remaining--; this.bricksBroken++; this.combo++;
+        b.hp = 0; b.alive = false; this.world.remove(b); this.writeBrick(b); this.remaining--; this.bricksBroken++; this.combo++;
         this.fx.shatter(b.x, b.z, b.color, 'std');
         this.addScore(100, b.x, b.z);
         this.explosionQueue.push({ x: b.x, z: b.z, t: 0.1 + Math.random() * 0.06, power: 1 });
@@ -801,6 +817,8 @@ export class Game {
         this.damageBrick(b, power >= 1.5 ? 99 : 3, { nx: Math.sign(b.x - x), nz: Math.sign(b.z - z) });
       }
     }
+    // ударная волна расталкивает уцелевшие блоки
+    this.world.blast(x, z, 5 * power, 5.5 * power);
     this.pushNeighbors(x, z, 5 * power, 2.5 * power);
     // ударная волна толкает шары
     for (const ball of this.balls) {
@@ -846,32 +864,38 @@ export class Game {
     const f = this.field;
     const free = [];
     for (let r = 2; r < Math.min(f.rows, 9); r++) for (let c = 0; c < f.cols; c++) {
-      const i = r * f.cols + c;
-      const b = this.bricks[i];
-      if (b && b.alive) continue;
-      if (this.boss && Math.abs((f.ox + (c + 0.5) * CELL_W) - this.boss.x) < this.boss.r + 0.8 && r < 6) continue;
-      free.push([c, r]);
+      const x = f.ox + (c + 0.5) * CELL_W, z = f.brickTop + (r + 0.5) * CELL_D;
+      if (this.world.brickAt(x, z, 0.35)) continue;
+      if (this.boss && Math.hypot(x - this.boss.x, z - this.boss.z) < this.boss.r + 1.2) continue;
+      free.push([c, r, x, z]);
     }
     for (let k = 0; k < n && free.length; k++) {
-      const [c, r] = free.splice(Math.floor(Math.random() * free.length), 1)[0];
-      const i = r * f.cols + c;
-      if (this.catCount.std >= this.brickMeshes.std.count) break;
-      let b = this.bricks[i];
+      const [c, r, x, z] = free.splice(Math.floor(Math.random() * free.length), 1)[0];
+      // переиспользуем мёртвый обычный кирпич, иначе берём свободный инстанс
+      let b = this.brickList.find((q) => !q.alive && q.cat === 'std' && !q.regen && !q.special);
       if (b) {
-        if (b.alive || b.cat !== 'std') continue;
-        b.alive = true; b.hp = b.maxHp; b.appear = 0.05; b.regenT = 0;
+        b.c = c; b.r = r; b.x = x; b.z = z; b.a = 0; b.ch = '1'; b.hp = b.maxHp = 1; b.hidden = false; b.secret = false;
+        b.explosive = false; b.bonus = false; b.gold = false;
+        b.color.set(this.loc.bricks[r % this.loc.bricks.length]); b.base.copy(b.color);
+        this.brickMeshes.std.setColorAt(b.inst, b.color);
+        this.brickMeshes.std.instanceColor.needsUpdate = true;
       } else {
+        if (this.catCount.std >= this.brickMeshes.std.count) break;
         b = {
-          i, c, r, ch: '1', x: f.ox + (c + 0.5) * CELL_W, z: f.brickTop + (r + 0.5) * CELL_D, hp: 1, maxHp: 1, cat: 'std',
-          alive: true, color: new THREE.Color(this.loc.bricks[r % this.loc.bricks.length]),
+          i: -1, c, r, ch: '1', x, z, hp: 1, maxHp: 1, cat: 'std',
+          color: new THREE.Color(this.loc.bricks[r % this.loc.bricks.length]),
           wy: 0, wvy: 0, wrx: 0, wvrx: 0, wrz: 0, wvrz: 0, appear: 0.05, regenT: 0,
         };
         b.base = b.color.clone();
-        this.bricks[i] = b;
         this.brickList.push(b);
+        b.alive = true;
+        this.world.add(b);
         this.assignInstance(b);
         this.brickMeshes.std.instanceColor.needsUpdate = true;
       }
+      b.alive = true; b.appear = 0.05; b.regenT = 0;
+      this.world.remove(b);
+      this.world.add(b);
       this.remaining++;
       this.wobbling.add(b);
       this.fx.sparksAt(b.x, 0.5, b.z, '#ffffff', 10, 3);
@@ -960,8 +984,7 @@ export class Game {
     // место для портала — свободная клетка в зоне кирпичей
     const free = [];
     for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
-      const b = this.bricks[r * f.cols + c];
-      if (!b || !b.alive) free.push([c, r]);
+      if (!this.world.brickAt(f.ox + (c + 0.5) * CELL_W, f.brickTop + (r + 0.5) * CELL_D, 0.5)) free.push([c, r]);
     }
     let x = 0, z = f.brickBottom + 2;
     if (free.length) {
@@ -1063,11 +1086,11 @@ export class Game {
       L.z -= 30 * dt;
       L.m.position.z = L.z;
       let dead = L.z < f.zTop;
-      const c = Math.floor((L.x - f.ox) / CELL_W), r = Math.floor((L.z - f.brickTop) / CELL_D);
-      if (!dead && c >= 0 && c < f.cols && r >= 0 && r < f.rows) {
-        const b = this.bricks[r * f.cols + c];
-        if (b && b.alive && Math.abs(L.x - b.x) < BRICK_W / 2 + 0.05) {
+      if (!dead) {
+        const b = this.world.brickAt(L.x, L.z, 0.05);
+        if (b) {
           dead = true;
+          this.world.impulse(b, 0, -0.9, L.x, L.z);
           this.damageBrick(b, 1, { nx: 0, nz: -1 });
         }
       }
