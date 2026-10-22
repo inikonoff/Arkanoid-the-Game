@@ -275,6 +275,7 @@ export class Boss {
       g.fx.shake(0.4);
       g.ui.toast(ph === 2 ? 'ЯРОСТЬ' : 'ФАЗА II', 'boss');
       if (this.cfg.summon) g.spawnBossBricks(6 + ph * 4);
+      g.grantCharge(); // новая фаза — заряд бустера игроку
     }
     // движение
     this.x = Math.sin(this.t * this.cfg.sweep * this.speedK) * this.range;
@@ -435,7 +436,7 @@ export class Boss {
       q.mesh.rotation.y += dt * 5;
       if (Math.random() < 0.6 * settings.particles) g.fx.sparks.emit(q.x, 0.6, q.z, 0, 0.5, 0, q.mesh.material.color, 0.35, 0.25, { grow: -0.5 });
       let dead = q.life <= 0 || q.z > f.zBottom + 2 || Math.abs(q.x) > f.W / 2 + 1;
-      if (!dead && g.shield > 0 && q.z > f.shieldZ - 0.2) {
+      if (!dead && g.shieldActive() && q.z > f.shieldZ - 0.2) {
         dead = true;
         g.fx.sparksAt(q.x, 0.4, q.z, '#9fe8ff', 12, 4);
       } else if (!dead && Math.abs(q.z - p.z) < 0.55 && Math.abs(q.x - p.x) < p.halfW + 0.2) {

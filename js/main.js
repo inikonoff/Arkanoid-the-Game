@@ -77,7 +77,7 @@ class App {
     this.mode = 'play';
     this.paused = false;
     this.currentLevel = level;
-    this.levelStart = { score: this.run.score, lives: this.run.lives };
+    this.levelStart = { score: this.run.score, lives: this.run.lives, boost: { ...(this.run.boost || {}) }, nextLife: this.run.nextLife };
     this.run.chaos = this.chaosMods();
     this.ui.hideAll();
     this.ui.setHud(true);
@@ -106,12 +106,12 @@ class App {
 
   playCampaign(i, carry) {
     if (i >= CAMPAIGN.length) return this.playEndless(0, carry);
-    this.run = { mode: 'campaign', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || 3 };
+    this.run = { mode: 'campaign', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || 3, boost: carry?.boost ? { ...carry.boost } : undefined, nextLife: carry?.nextLife };
     this.startLevel(CAMPAIGN[i]);
   }
 
   playEndless(i = 0, carry) {
-    this.run = { mode: 'endless', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || 3 };
+    this.run = { mode: 'endless', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || 3, boost: carry?.boost ? { ...carry.boost } : undefined, nextLife: carry?.nextLife };
     const lv = endlessLevel(i);
     lv.id = 'e' + i;
     lv.name = `∞ ${String(i + 1).padStart(2, '0')} · ${lv.name}`;
@@ -137,8 +137,8 @@ class App {
     }
     profile.bestScore = Math.max(profile.bestScore, this.run.score);
     if (this.run.mode === 'campaign' || this.run.mode === 'endless') {
-      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex + 1, score: this.run.score, lives: this.run.lives };
-      if (this.run.mode === 'campaign' && this.run.levelIndex + 1 >= CAMPAIGN.length) profile.saved = { mode: 'endless', levelIndex: 0, score: this.run.score, lives: this.run.lives };
+      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex + 1, score: this.run.score, lives: this.run.lives, boost: { ...this.run.boost }, nextLife: this.run.nextLife };
+      if (this.run.mode === 'campaign' && this.run.levelIndex + 1 >= CAMPAIGN.length) profile.saved = { mode: 'endless', levelIndex: 0, score: this.run.score, lives: this.run.lives, boost: { ...this.run.boost }, nextLife: this.run.nextLife };
     }
     saveProfile();
     const rows = [
@@ -161,7 +161,7 @@ class App {
 
   nextLevel() {
     const r = this.run;
-    const carry = { score: r.score, lives: r.lives };
+    const carry = { score: r.score, lives: r.lives, boost: r.boost, nextLife: r.nextLife };
     if (r.mode === 'campaign') this.playCampaign(r.levelIndex + 1, carry);
     else if (r.mode === 'endless') this.playEndless(r.levelIndex + 1, carry);
     else {
@@ -240,12 +240,14 @@ class App {
   restart() {
     this.run.score = this.levelStart.score;
     this.run.lives = Math.max(this.levelStart.lives, 1);
+    this.run.boost = { ...this.levelStart.boost };
+    this.run.nextLife = this.levelStart.nextLife;
     this.startLevel(this.currentLevel);
   }
 
   quitToMenu() {
     if (this.mode === 'play' && (this.run.mode === 'campaign' || this.run.mode === 'endless') && !this.currentLevel.bonus) {
-      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex, score: this.levelStart.score, lives: this.levelStart.lives };
+      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex, score: this.levelStart.score, lives: this.levelStart.lives, boost: this.levelStart.boost, nextLife: this.levelStart.nextLife };
       saveProfile();
     }
     this.audio.stopMusic();

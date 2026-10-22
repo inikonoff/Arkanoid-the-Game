@@ -32,7 +32,29 @@ export const POWERUPS = {
   life: { label: '+1', color: '#f6d55c', good: true, w: 3 },
   shrink: { label: 'УЖЕ', color: '#6c757d', good: false, w: 7, dur: 12 },
   fast: { label: 'БЫСТР.', color: '#c9184a', good: false, w: 6, dur: 10 },
+  cell: { label: 'ЗАРЯД', color: '#d9c2ff', good: true, w: 2 },
 };
+
+// Бустеры, которые игрок запускает сам (кнопки на HUD / клавиши 1–4)
+export const BOOSTERS = {
+  field: { label: 'ПОЛЕ', icon: '▁', color: '#9fe8ff', dur: 8, key: '1', desc: 'Защитное поле под ракеткой — шары не падают' },
+  gun: { label: 'ПУЛЕМЁТ', icon: '⁞', color: '#ffb02e', dur: 6, key: '2', desc: 'Скорострельная очередь из центра ракетки' },
+  armor: { label: 'БРОНЯ', icon: '◆', color: '#ffd166', dur: 10, key: '3', desc: 'Снаряды и лучи босса не действуют на ракетку' },
+  sticky: { label: 'ЛИПУЧКА', icon: '◎', color: '#20c997', dur: 12, key: '4', desc: 'Шар прилипает к ракетке, запуск касанием' },
+};
+export const BOOST_MAX = 3;
+export const defaultBoosts = () => ({ field: 1, gun: 1, armor: 1, sticky: 1 });
+
+// Пул снабжения в бою с боссом: только полезное, оружие чаще
+const SUPPLY = [['multi', 4], ['laser', 4], ['fire', 3], ['mega', 3], ['cell', 3], ['expand', 3], ['shield', 2], ['catch', 2], ['slow', 2], ['life', 0.5]];
+function pickSupply() {
+  let r = Math.random() * SUPPLY.reduce((a, s) => a + s[1], 0);
+  for (const [k, w] of SUPPLY) { r -= w; if (r <= 0) return k; }
+  return 'laser';
+}
+const LIFE_EVERY = 30000;
+const fmtK = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const MAX_LIVES = 7;
 
 const TYPE = {
   '1': { hp: 1, cat: 'std' }, '2': { hp: 2, cat: 'std' }, '3': { hp: 3, cat: 'std' },
@@ -145,7 +167,12 @@ export class Game {
     this.powerups = [];
     this.lasers = [];
     this.pickups = [];
-    this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0 };
+    this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0 };
+    this.run.boost ||= defaultBoosts();
+    this.run.nextLife ||= Math.ceil((this.run.score + 1) / LIFE_EVERY) * LIFE_EVERY;
+    this.supplyT = 9;
+    this.bossMarks = [0.8, 0.6, 0.4, 0.2];
+    this.gunCd = 0;
     this.shield = 0;
     this.megaCharges = 0;
     this.buildShield();
@@ -503,6 +530,7 @@ export class Game {
       this.updateTimers(sdt);
       this.updatePowerups(sdt);
       this.updateLasers(sdt);
+      this.updateSupply(sdt);
     }
     if (this.boss && this.boss.alive) {
       this.boss.update(sdt);
@@ -556,7 +584,7 @@ export class Game {
     p.g.scale.set(1 + p.squash * 0.06, 1 - p.squash * 0.15, 1);
     p.flash = Math.max(0, p.flash - dt);
     const magnet = this.effects.catch > 0;
-    const base = p.freeze > 0 ? '#9fe8ff' : magnet ? '#20c997' : this.loc.accent;
+    const base = p.freeze > 0 ? '#9fe8ff' : this.effects.armor > 0 ? '#ffd166' : magnet ? '#20c997' : this.loc.accent;
     p.stripMat.color.set(base).multiplyScalar(1.6 + (p.flash > 0 ? Math.sin(this.time * 60) * 1.5 : 0));
   }
 
@@ -634,12 +662,12 @@ export class Game {
       else if (b.x > hw - b.r) { b.x = hw - b.r; b.vx = -Math.abs(b.vx); this.wallHit(b); }
       if (b.z < f.zTop + b.r) { b.z = f.zTop + b.r; b.vz = Math.abs(b.vz); this.wallHit(b); }
       // щит
-      if (this.shield > 0 && b.vz > 0 && b.z > f.shieldZ - b.r && b.z < f.shieldZ + 0.4) {
+      if (this.shieldActive() && b.vz > 0 && b.z > f.shieldZ - b.r && b.z < f.shieldZ + 0.4) {
         b.z = f.shieldZ - b.r; b.vz = -Math.abs(b.vz);
         this.fx.sparksAt(b.x, 0.3, b.z, '#9fe8ff', 10, 4);
         this.audio.metal();
-        this.shield--;
-        this.shieldMesh.visible = this.shield > 0;
+        if (this.effects.field <= 0) this.shield--;
+        this.shieldMesh.visible = this.shieldActive();
       }
       // ракетка
       if (b.vz > 0 && b.z + b.r > p.z - PADDLE_D && b.z - b.r < p.z + PADDLE_D * 0.5 && Math.abs(b.x - p.x) < p.halfW + b.r * 0.6) {
@@ -1134,7 +1162,8 @@ export class Game {
         break;
       case 'shield': this.shield = 3; this.effects.shield = P.dur; this.shieldMesh.visible = true; break;
       case 'mega': this.megaCharges = Math.min(5, this.megaCharges + 3); for (const b of this.balls) { b.mega = true; b.mesh.material = this.megaMat; } break;
-      case 'life': this.run.lives = Math.min(7, this.run.lives + 1); break;
+      case 'life': this.run.lives = Math.min(MAX_LIVES, this.run.lives + 1); break;
+      case 'cell': this.grantCharge(); break;
     }
   }
 
@@ -1147,7 +1176,8 @@ export class Game {
         e[k] = 0;
         if (k === 'expand') this.expandLevel = 0;
         if (k === 'fire') for (const b of this.balls) { b.fire = false; if (!b.mega) b.mesh.material = this.ballMat; }
-        if (k === 'shield') { this.shield = 0; this.shieldMesh.visible = false; }
+        if (k === 'shield') { this.shield = 0; this.shieldMesh.visible = this.shieldActive(); }
+        if (k === 'field') this.shieldMesh.visible = this.shieldActive();
       }
     }
     if (this.shieldMesh.visible) this.shieldMesh.material.opacity = 0.5 + Math.sin(this.time * 8) * 0.25;
@@ -1181,9 +1211,22 @@ export class Game {
         this.audio.laser();
       }
     }
+    if (this.effects.gun > 0 && this.state === 'play') {
+      this.gunCd -= dt;
+      if (this.gunCd <= 0) {
+        this.gunCd = 0.075;
+        const m = new THREE.Mesh(geos().laser, this.gunMat || (this.gunMat = glow('#ffb02e', 3)));
+        const x = p.x + (Math.random() - 0.5) * 0.35;
+        m.position.set(x, 0.55, p.z - 0.5);
+        m.scale.set(1.3, 1.3, 0.7);
+        this.scene.add(m);
+        this.lasers.push({ x, z: p.z - 0.5, m, gun: true });
+        if (Math.random() < 0.5) this.audio.laser();
+      }
+    }
     for (let i = this.lasers.length - 1; i >= 0; i--) {
       const L = this.lasers[i];
-      L.z -= 30 * dt;
+      L.z -= (L.gun ? 38 : 30) * dt;
       L.m.position.z = L.z;
       let dead = L.z < f.zTop;
       if (!dead) {
@@ -1197,7 +1240,7 @@ export class Game {
       }
       if (!dead && this.boss && this.boss.alive && !this.boss.dying && Math.hypot(L.x - this.boss.x, L.z - this.boss.z) < this.boss.r) {
         dead = true;
-        if (!(this.boss.type === 'hydra' && this.boss.orbiters.some((o) => o.alive))) this.boss.damage(0.34, L.x, L.z);
+        if (!(this.boss.type === 'hydra' && this.boss.orbiters.some((o) => o.alive))) this.boss.damage(L.gun ? 0.22 : 0.34, L.x, L.z);
       }
       if (dead) {
         this.fx.sparksAt(L.x, 0.5, L.z, '#ff8a70', 5, 3, { size: 0.1, life: 0.25 });
@@ -1209,6 +1252,13 @@ export class Game {
 
   paddleHit(kind) {
     const p = this.paddle;
+    if (this.effects.armor > 0) {
+      // броня: удар отражён
+      this.fx.sparksAt(p.x, 0.6, p.z - 0.3, '#ffd166', 18, 5);
+      this.fx.ring(p.x, p.z, 1.6, '#ffd166', 0.25);
+      this.audio.metal();
+      return;
+    }
     this.fx.sparksAt(p.x, 0.5, p.z, kind === 'freeze' ? '#bfefff' : '#ff6a3a', 30, 6);
     this.fx.shake(0.3);
     vibrate(60);
@@ -1220,11 +1270,78 @@ export class Game {
     this.audio.bossHit();
   }
 
+  // ———————————————————————— Бустеры и снабжение ————————————————————————
+  shieldActive() { return this.shield > 0 || this.effects.field > 0; }
+
+  activateBooster(id) {
+    const B = BOOSTERS[id], boost = this.run.boost;
+    if (!B || !boost || this.run.demo || (this.state !== 'play' && this.state !== 'ready') || this.won) return false;
+    if ((boost[id] || 0) <= 0) { this.audio.click(); return false; }
+    boost[id]--;
+    switch (id) {
+      case 'field': this.effects.field = B.dur; this.shieldMesh.visible = true; break;
+      case 'gun': this.effects.gun = B.dur; this.gunCd = 0; break;
+      case 'armor': this.effects.armor = B.dur; break;
+      case 'sticky': this.effects.catch = Math.max(this.effects.catch, B.dur); break;
+    }
+    this.audio.power(true);
+    vibrate([15, 25, 15]);
+    this.fx.ring(this.paddle.x, this.paddle.z, 2.8, B.color, 0.4);
+    this.fx.sparksAt(this.paddle.x, 0.5, this.paddle.z, B.color, 20, 5);
+    this.ui.toast(B.label, 'good');
+    return true;
+  }
+
+  // +1 заряд случайного бустера (если есть место)
+  grantCharge(silent = false) {
+    const boost = this.run.boost;
+    const free = Object.keys(BOOSTERS).filter((k) => (boost[k] || 0) < BOOST_MAX);
+    if (!free.length) { this.addScore(500); return; }
+    // достаётся тому бустеру, которого меньше всего
+    const min = Math.min(...free.map((k) => boost[k] || 0));
+    const pool = free.filter((k) => (boost[k] || 0) === min);
+    const k = pool[Math.floor(Math.random() * pool.length)];
+    boost[k] = (boost[k] || 0) + 1;
+    if (!silent) this.ui.toast(`+1 ${BOOSTERS[k].label}`, 'good');
+    this.ui.boosterGained?.(k);
+  }
+
+  giveLife(msg) {
+    if (this.run.lives >= MAX_LIVES) { this.addScore(2000); return; }
+    this.run.lives++;
+    this.audio.star();
+    this.ui.toast(msg, 'good');
+  }
+
+  // Бой с боссом: оружие выдаётся равномерно всю схватку, даже на пустом поле
+  updateSupply(dt) {
+    const B = this.boss;
+    if (!B || !B.alive || B.dying || this.state !== 'play' || this.won) return;
+    const f = this.field;
+    // по таймеру — сверху, в случайной точке
+    this.supplyT -= dt;
+    if (this.supplyT <= 0 && this.powerups.length < 3) {
+      this.supplyT = 11 + Math.random() * 5;
+      const x = (Math.random() - 0.5) * (f.W - 3);
+      this.spawnPowerup(x, f.brickBottom + 0.5, pickSupply());
+      this.fx.sparksAt(x, 0.8, f.brickBottom + 0.5, '#ffffff', 14, 3);
+    }
+    // за каждые 20% здоровья босса — капсула прямо из него
+    while (this.bossMarks.length && B.ratio <= this.bossMarks[0]) {
+      this.bossMarks.shift();
+      this.spawnPowerup(B.x, B.z + B.r + 0.4, Math.random() < 0.35 ? 'cell' : pickSupply());
+    }
+  }
+
   // ———————————————————————— Счёт и состояние ————————————————————————
   addScore(n, x, z, quiet = false) {
     const mul = 1 + Math.min(12, Math.floor(this.combo / 4)) * 0.25;
     const pts = Math.round(n * mul);
     this.run.score += pts;
+    if (this.run.score >= this.run.nextLife && !this.run.demo) {
+      this.run.nextLife += LIFE_EVERY;
+      this.giveLife(`+1 ЖИЗНЬ · ${fmtK(this.run.nextLife - LIFE_EVERY)} ОЧКОВ`);
+    }
     if (!quiet && x !== undefined && pts >= 50) this.ui.popup(this, x, z, pts, mul > 1 ? mul : 0);
   }
 
@@ -1272,6 +1389,7 @@ export class Game {
 
   onBossDead(boss) {
     this.addScore(10000, boss.x, boss.z);
+    this.giveLife('+1 ЖИЗНЬ ЗА БОССА');
     profile.bossesDefeated++;
     saveProfile();
     this.slowmo = 1.2;

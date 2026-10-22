@@ -93,6 +93,8 @@ export class Input {
       if (this.app.mode === 'play') { this.app.paused ? this.app.resume() : this.app.pause(); }
       else if (this.app.ui.current() !== 'menu') this.app.ui.back();
     }
+    const bk = { Digit1: 'field', Digit2: 'gun', Digit3: 'armor', Digit4: 'sticky' }[e.code];
+    if (bk && this.active()) { this.game.activateBooster(bk); e.preventDefault(); }
     if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp' || e.code === 'KeyW') {
       if (this.active()) { this.game.launch(); e.preventDefault(); }
     }

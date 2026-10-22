@@ -3,7 +3,7 @@ import { settings, setSetting, applyPreset, resetSettings, profile, saveProfile,
 import { LOCATIONS, WEATHER_INFO } from './locations.js';
 import { CAMPAIGN } from './levels.js';
 import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts } from './generator.js';
-import { POWERUPS } from './game.js';
+import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -351,7 +351,7 @@ export class UI {
     const pu = Object.entries(POWERUPS).map(([, p]) => `<li><i class="sw" style="background:${p.color}"></i><span><span class="tag">${p.label}</span>${{
       ШИРЕ: 'Шире ракетка (до 2 уровней).', '×3': 'Каждый шар делится на три.', ЛАЗЕР: 'Автоматические лазерные пушки.', МАГНИТ: 'Шар прилипает, отпусти касанием.',
       'МЕДЛ.': 'Замедляет шары.', ОГОНЬ: 'Шар прожигает кирпичи насквозь.', ЩИТ: 'Барьер внизу на 3 отскока.', БОМБА: '3 заряда: следующий удар — мегавзрыв.',
-      '+1': 'Дополнительная жизнь.', УЖЕ: 'Ловушка: ракетка уже.', 'БЫСТР.': 'Ловушка: шары быстрее.',
+      '+1': 'Дополнительная жизнь.', УЖЕ: 'Ловушка: ракетка уже.', 'БЫСТР.': 'Ловушка: шары быстрее.', ЗАРЯД: '+1 заряд случайного бустера.',
     }[p.label] || ''}</span></li>`).join('');
     const bricks = [
       ['#e8562a', 'Обычный — 1–3 удара, цвет темнеет с уроном.'], ['#8d99ae', 'Броня — 5 ударов.'], ['#3a3d45', 'Сталь — неразрушима, даже огнём.'],
@@ -366,6 +366,9 @@ export class UI {
       </ul></div>
       <div class="help-card"><h3>КИРПИЧИ</h3><ul>${bricks.map(([c, t]) => `<li><i class="sw" style="background:${c}"></i><span>${t}</span></li>`).join('')}</ul></div>
       <div class="help-card"><h3>БОНУСЫ</h3><ul>${pu}</ul></div>
+      <div class="help-card"><h3>БУСТЕРЫ</h3><ul>${Object.values(BOOSTERS).map((B) => `<li><i class="sw" style="background:${B.color}"></i><span><span class="tag">${B.key}</span><b>${B.label}</b> — ${B.desc}, ${B.dur} с.</span></li>`).join('')}
+        <li><span class="tag">+</span><span>Кнопки справа или клавиши 1–4. В начале забега — по одному заряду, максимум ${BOOST_MAX}. Новые заряды: капсула «ЗАРЯД», каждая новая фаза босса.</span></li></ul></div>
+      <div class="help-card"><h3>ЖИЗНИ И СНАБЖЕНИЕ</h3><p>+1 жизнь за каждого побеждённого босса и за каждые 30 000 очков (максимум 7). В бою с боссом оружие сбрасывается сверху каждые 11–16 секунд, даже когда поле пустое, а каждые 20% здоровья босса из него выпадает капсула.</p></div>
       <div class="help-card"><h3>ПОГОДА И ФИЗИКА</h3><ul>
         ${LOCATIONS.map((l) => `<li><i class="sw" style="background:${l.accent}"></i><span><b>${l.tag}</b> — ${l.desc}</span></li>`).join('')}
       </ul></div>
@@ -374,7 +377,27 @@ export class UI {
   }
 
   // ——— HUD ———
-  setHud(on) { $('#hud').classList.toggle('hidden', !on); }
+  setHud(on) { $('#hud').classList.toggle('hidden', !on); if (on) this.buildBoosters(); }
+
+  buildBoosters() {
+    const box = $('#h-boost');
+    if (box.childElementCount) return;
+    for (const [id, B] of Object.entries(BOOSTERS)) {
+      const b = el('button', 'boost', `<span class="bi">${B.icon}</span><span class="bl">${B.label}</span><span class="bn mono">0</span><span class="bk mono">${B.key}</span><i></i>`);
+      b.dataset.id = id;
+      b.style.setProperty('--c', B.color);
+      b.title = B.desc;
+      // pointerdown, чтобы срабатывало мгновенно и не считалось касанием поля
+      b.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); this.app.audio.unlock(); this.app.game.activateBooster(id); });
+      box.appendChild(b);
+    }
+  }
+
+  boosterGained(id) {
+    const b = document.querySelector(`.boost[data-id="${id}"]`);
+    if (!b) return;
+    b.classList.remove('gain'); void b.offsetWidth; b.classList.add('gain');
+  }
 
   hud(game) {
     if (game.run.demo) return;
@@ -395,6 +418,25 @@ export class UI {
     if (boss && boss.alive) {
       set('bossName', boss.name, (v) => { $('#h-boss-name').textContent = v; });
       set('bossHp', Math.ceil(boss.ratio * 100), (v) => { $('#h-boss-hp').textContent = v + '%'; $('#h-boss-fill').style.transform = `scaleX(${boss.ratio})`; });
+    }
+    // бустеры: заряды и активность
+    const boost = game.run.boost;
+    if (boost) {
+      const bkey = Object.keys(BOOSTERS).map((k) => `${boost[k] || 0}${game.effects[k === 'sticky' ? 'catch' : k] > 0 ? 'a' : ''}`).join();
+      if (c.boostKey !== bkey) {
+        c.boostKey = bkey;
+        document.querySelectorAll('.boost').forEach((b) => {
+          const id = b.dataset.id, n = boost[id] || 0;
+          const active = game.effects[id === 'sticky' ? 'catch' : id] > 0;
+          b.querySelector('.bn').textContent = n;
+          b.classList.toggle('empty', n <= 0 && !active);
+          b.classList.toggle('active', active);
+        });
+      }
+      document.querySelectorAll('.boost.active').forEach((b) => {
+        const id = b.dataset.id, t = game.effects[id === 'sticky' ? 'catch' : id];
+        b.querySelector('i').style.transform = `scaleX(${Math.max(0, Math.min(1, t / BOOSTERS[id].dur))})`;
+      });
     }
     // эффекты (раз в 6 кадров — меньше аллокаций и работы с DOM)
     if ((c.effTick = (c.effTick || 0) + 1) % 6 !== 0) return;
