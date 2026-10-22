@@ -4,7 +4,7 @@ import { LOCATIONS, WEATHER_INFO } from './locations.js';
 import { CAMPAIGN } from './levels.js';
 import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts } from './generator.js';
 import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
-import { cheats, enterCode, TOGGLE_LABELS } from './cheats.js';
+import { cheats, enterCode, TOGGLE_LABELS, ownedCodes } from './cheats.js';
 import { SUPER_FX, CHAINS, CHAIN_NEED, BOOST_SUPER_LABEL } from './supers.js';
 
 const $ = (s) => document.querySelector(s);
@@ -354,6 +354,29 @@ export class UI {
     return row;
   }
 
+  // ——— Трофей: выбор кода ———
+  showReward(opts, done) {
+    const box = $('#rw-cards'), fin = $('#rw-done');
+    box.innerHTML = '';
+    fin.classList.add('hidden');
+    let picked = false;
+    for (const o of opts) {
+      const b = el('button', 'rw-card', `<span class="rw-code mono">${o.id}</span><span class="rw-desc">${o.desc}</span>`);
+      b.addEventListener('click', () => {
+        if (picked) return;
+        picked = true;
+        box.querySelectorAll('.rw-card').forEach((c) => c.classList.toggle('off', c !== b));
+        b.classList.add('on');
+        fin.textContent = `Код «${o.id}» теперь твой — вводи его в «Чёрном ходе».`;
+        fin.classList.remove('hidden');
+        this.app.audio.star();
+        setTimeout(() => done(o.id), 1500);
+      });
+      box.appendChild(b);
+    }
+    this.show('reward');
+  }
+
   // ——— Чёрный ход ———
   buildBackdoor() {
     const log = $('#bd-log');
@@ -404,6 +427,16 @@ export class UI {
       box.appendChild(b);
     }
     for (const t of pend) box.appendChild(el('span', 'chipbtn', t));
+    // полученные коды — ввод касанием
+    const own = ownedCodes();
+    const h = el('div', 'mono dim ta-h', own.length ? `ТВОИ КОДЫ · ${own.length}/10 · КОСНИСЬ, ЧТОБЫ ВВЕСТИ` : 'КОДОВ ПОКА НЕТ · ПОБЕЖДАЙ БОССОВ — КАЖДЫЙ ДАЁТ ТРОФЕЙ');
+    box.appendChild(h);
+    for (const o of own) {
+      const b = el('button', 'chipbtn', o.id);
+      b.title = o.desc;
+      b.addEventListener('click', () => { $('#bd-input').value = o.id; $('#bd-form').requestSubmit(); });
+      box.appendChild(b);
+    }
   }
 
   // ——— Справка ———
@@ -412,7 +445,7 @@ export class UI {
     const pu = Object.entries(POWERUPS).map(([, p]) => `<li><i class="sw" style="background:${p.color}"></i><span><span class="tag">${p.label}</span>${{
       ШИРЕ: 'Шире ракетка (до 2 уровней).', '×3': 'Каждый шар делится на три.', ЛАЗЕР: 'Автоматические лазерные пушки.', МАГНИТ: 'Шар прилипает, отпусти касанием.',
       'МЕДЛ.': 'Замедляет шары.', ОГОНЬ: 'Шар прожигает кирпичи насквозь.', ЩИТ: 'Барьер внизу на 3 отскока.', БОМБА: '3 заряда: следующий удар — мегавзрыв.',
-      '+1': 'Дополнительная жизнь.', УЖЕ: 'Ловушка: ракетка уже.', 'БЫСТР.': 'Ловушка: шары быстрее.', ЗАРЯД: '+1 заряд случайного бустера.',
+      '+1': 'Дополнительная жизнь.', УЖЕ: 'Ловушка: ракетка уже.', 'БЫСТР.': 'Ловушка: шары быстрее.', ЗАРЯД: '+1 заряд случайного бустера.', ГРАВИТАЦИЯ: 'Падающий шар притягивает к ракетке, 15 с.',
     }[p.label] || ''}</span></li>`).join('');
     const bricks = [
       ['#e8562a', 'Обычный — 1–3 удара, цвет темнеет с уроном.'], ['#8d99ae', 'Броня — 5 ударов.'], ['#3a3d45', 'Сталь — неразрушима, даже огнём.'],
@@ -440,7 +473,7 @@ export class UI {
         ${LOCATIONS.map((l) => `<li><i class="sw" style="background:${l.accent}"></i><span><b>${l.tag}</b> — ${l.desc}</span></li>`).join('')}
       </ul></div>
       <div class="help-card"><h3>БОССЫ</h3><p>Каждый третий уровень — босс со щитами, фазами и своими атаками. Попадания по ракетке оглушают её, лучи замораживают, чернила кракена закрывают обзор. В ярости босс призывает подкрепление.</p></div>
-      <div class="help-card"><h3>СЕКРЕТЫ</h3><p>В некоторых уровнях спрятаны невидимые кирпичи с кристаллами — их выдают редкие искры. Поймай кристалл ракеткой, и откроются варп-врата в бонус-уровень. Говорят, логотип скрывает ещё кое-что… А для тех, кому совсем тяжело, в меню есть «Чёрный ход».</p></div>`;
+      <div class="help-card"><h3>СЕКРЕТЫ</h3><p>В некоторых уровнях спрятаны невидимые кирпичи с кристаллами — их выдают редкие искры. Поймай кристалл ракеткой, и откроются варп-врата в бонус-уровень. Говорят, логотип скрывает ещё кое-что… А для тех, кому совсем тяжело, в меню есть «Чёрный ход»: каждый побеждённый босс дарит на выбор один из трёх секретных кодов.</p></div>`;
   }
 
   // ——— HUD ———

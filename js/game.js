@@ -35,6 +35,7 @@ export const POWERUPS = {
   shrink: { label: 'УЖЕ', color: '#6c757d', good: false, w: 7, dur: 12 },
   fast: { label: 'БЫСТР.', color: '#c9184a', good: false, w: 6, dur: 10 },
   cell: { label: 'ЗАРЯД', color: '#d9c2ff', good: true, w: 2 },
+  gravity: { label: 'ГРАВИТАЦИЯ', color: '#7b61ff', good: true, w: 7, dur: 15 },
 };
 
 // Бустеры, которые игрок запускает сам (кнопки на HUD / клавиши 1–4)
@@ -48,7 +49,7 @@ export const BOOST_MAX = 3;
 export const defaultBoosts = () => ({ field: 1, gun: 1, armor: 1, sticky: 1 });
 
 // Пул снабжения в бою с боссом: только полезное, оружие чаще
-const SUPPLY = [['multi', 4], ['laser', 4], ['fire', 3], ['mega', 3], ['cell', 3], ['expand', 3], ['shield', 2], ['catch', 2], ['slow', 2], ['life', 0.5]];
+const SUPPLY = [['gravity', 2], ['multi', 4], ['laser', 4], ['fire', 3], ['mega', 3], ['cell', 3], ['expand', 3], ['shield', 2], ['catch', 2], ['slow', 2], ['life', 0.5]];
 function pickSupply() {
   let r = Math.random() * SUPPLY.reduce((a, s) => a + s[1], 0);
   for (const [k, w] of SUPPLY) { r -= w; if (r <= 0) return k; }
@@ -171,7 +172,7 @@ export class Game {
     this.powerups = [];
     this.lasers = [];
     this.pickups = [];
-    this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0, ...superEffects() };
+    this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0, gravity: 0, ...superEffects() };
     this.chains = {};
     this.beams = [];
     this.burnQ = [];
@@ -661,6 +662,7 @@ export class Game {
         b.vx += (dx / d) * a * h * 6; b.vz += (dz / d) * a * h * 6;
       }
       if (this.effects.gravitron > 0) this.steerBall(b, h);
+      if (this.effects.gravity > 0) this.pullToPaddle(b, h);
       // регулировка скорости: силы меняют направление, но не убивают темп
       let s = Math.hypot(b.vx, b.vz) || 1;
       let ns = s + (target - s) * Math.min(1, h * 1.2);
@@ -1246,6 +1248,7 @@ export class Game {
       case 'mega': this.megaCharges = Math.min(5, this.megaCharges + 3); for (const b of this.balls) { b.mega = true; b.mesh.material = this.megaMat; } break;
       case 'life': this.run.lives = Math.min(MAX_LIVES, this.run.lives + 1); break;
       case 'cell': this.grantCharge(); break;
+      case 'gravity': this.effects.gravity = P.dur; break;
     }
     this.chainCollect(type);
   }
@@ -1379,6 +1382,24 @@ export class Game {
     this.expandLevel = Math.max(0, (this.expandLevel || 0) - 1);
     if (kind === 'ink') this.ui.ink();
     this.audio.bossHit();
+  }
+
+  // ГРАВИТАЦИЯ: падающий шар притягивается к ракетке (вверх летит как обычно)
+  pullToPaddle(b, h) {
+    if (b.vz <= 0) return;
+    const p = this.paddle;
+    const dx = p.x - b.x, dz = p.z - b.z;
+    if (dz <= 0) return;
+    const cur = Math.atan2(b.vz, b.vx), want = Math.atan2(dz, dx);
+    let d = want - cur;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    // чем ближе к ракетке, тем сильнее тянет
+    const k = 1.2 + 3.5 * Math.max(0, 1 - dz / 14);
+    const a = cur + Math.max(-k * h, Math.min(k * h, d));
+    const sp = Math.hypot(b.vx, b.vz);
+    b.vx = Math.cos(a) * sp; b.vz = Math.sin(a) * sp;
+    if (Math.random() < 0.25) this.fx.sparks.emit(b.x, b.y, b.z, dx * 0.2, 0, dz * 0.2, _c.set('#7b61ff'), 0.16, 0.3, { drag: 2 });
   }
 
   // ———————————————————————— Бустеры и снабжение ————————————————————————

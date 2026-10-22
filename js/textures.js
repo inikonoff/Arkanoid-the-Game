@@ -172,6 +172,9 @@ export function powerupLabel(text, bg, fg) {
   for (let x = 0; x < 256; x += 8) g.fillRect(x, 0, 2, 64);
   g.fillStyle = fg;
   g.font = '700 40px "Archivo", "Arial Narrow", sans-serif';
+  // длинные подписи ужимаем, чтобы влезали на половину окружности капсулы
+  const w = g.measureText(text).width;
+  if (w > 116) g.font = `700 ${Math.floor(40 * 116 / w)}px "Archivo", "Arial Narrow", sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   for (let k = 0; k < 2; k++) g.fillText(text, 64 + k * 128, 34);

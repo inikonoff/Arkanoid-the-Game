@@ -17,6 +17,17 @@ const HALF_PI = Math.PI / 2;
 
 let UID = 0;
 const MASS = { std: 3, metal: 7, glass: 2, glow: 3, tower: 3.4 };
+// Масса по типу блока: лёгкие отлетают далеко, тяжёлые едва сдвигаются
+export const MASS_BY_TYPE = {
+  G: 1.1,   // стекло — пушинка
+  '?': 1.6, // бонусный — лёгкий
+  S: 1.5, I: 2.4, R: 2.2,
+  '1': 2.2, '2': 3.4, '3': 4.8, // чем прочнее, тем тяжелее
+  X: 2.6,   // взрывчатка
+  T: 3.4,   // башня
+  A: 7.5,   // броня — тяжёлая
+  $: 10,    // золото — самое тяжёлое
+};
 
 // Множители полуразмеров: углы и точки-щупы контакта (утопленные углы + середины рёбер)
 const CORNERS = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
@@ -61,7 +72,7 @@ export class BrickWorld {
     b.a = b.a || 0;
     b.vx = 0; b.vz = 0; b.w = 0;
     b.homeX = b.x; b.homeZ = b.z;
-    const m = b.steel ? 0 : MASS[b.cat] * (1 + (Math.min(b.maxHp, 5) - 1) * 0.15);
+    const m = b.steel ? 0 : (MASS_BY_TYPE[b.ch] ?? MASS[b.cat]);
     b.mass = m;
     b.inv = m ? 1 / m : 0;
     if (b.tower) {

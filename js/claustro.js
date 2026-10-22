@@ -165,6 +165,7 @@ export class Claustro {
     saveProfile();
     g.boss = null;
     g.audio.intensity = 0.5;
+    setTimeout(() => g.app.offerReward?.(), 1600);
     this.bossN++;
     this.nextBoss = this.dist + BOSS_STEP + this.bossN * 25;
     const alive = g.brickList.filter((b) => b.alive);

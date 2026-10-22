@@ -89,6 +89,7 @@ export class Input {
     if (e.target && e.target.tagName === 'INPUT') return;
     if (down) this.keys.add(e.code); else this.keys.delete(e.code);
     if (!down) return;
+    if (this.app.ui.current() === 'reward') return; // трофей нужно выбрать
     if (e.code === 'Escape' || e.code === 'KeyP') {
       if (this.app.mode === 'play') { this.app.paused ? this.app.resume() : this.app.pause(); }
       else if (this.app.ui.current() !== 'menu') this.app.ui.back();

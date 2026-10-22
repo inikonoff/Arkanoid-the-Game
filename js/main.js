@@ -8,7 +8,7 @@ import { Input } from './input.js';
 import { CAMPAIGN } from './levels.js';
 import { generateLevel, endlessLevel } from './generator.js';
 import { LOCATIONS } from './locations.js';
-import { applyPending, gameplayCheatsOn, cheats } from './cheats.js';
+import { applyPending, gameplayCheatsOn, cheats, rewardOptions, grantCode } from './cheats.js';
 
 const bootFill = document.getElementById('boot-fill');
 const bootText = document.getElementById('boot-text');
@@ -165,7 +165,11 @@ class App {
     if (this.run.mode === 'campaign' && this.run.levelIndex === CAMPAIGN.length - 1) kicker = 'КАМПАНИЯ ПРОЙДЕНА · ДАЛЕЕ — БЕСКОНЕЧНОСТЬ';
     this.mode = 'result';
     this.ui.setHud(false);
-    this.ui.showResult(lv, res, rows, kicker);
+    const show = () => this.ui.showResult(lv, res, rows, kicker);
+    // трофей за босса: выбрать один код из трёх
+    const opts = res.boss && !lv.bonus ? rewardOptions() : [];
+    if (opts.length) this.ui.showReward(opts, (id) => { grantCode(id); show(); });
+    else show();
   }
 
   nextLevel() {
@@ -285,6 +289,24 @@ class App {
   }
 
   markRebuild() { this.needsRebuild = true; }
+
+  // Трофей посреди забега (босс в «Клаустрофобии»): пауза → выбор → продолжение
+  offerReward() {
+    const opts = rewardOptions();
+    if (!opts.length || this.mode !== 'play') return;
+    this.paused = true;
+    this.ui.setHud(false);
+    this.audio.stopMusic();
+    this.ui.showReward(opts, (id) => {
+      grantCode(id);
+      this.paused = false;
+      this.ui.hideAll();
+      this.ui.stack = ['menu'];
+      this.ui.setHud(true);
+      this.ui.resetHud();
+      this.audio.startMusic();
+    });
+  }
 
   // Рекорды с читами хранятся отдельно (помечаются звёздочкой)
   updateBest() {
