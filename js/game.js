@@ -11,6 +11,7 @@ import { mat, glow } from './mat.js';
 import { powerupLabel } from './textures.js';
 import { vibrate } from './audio.js';
 import { BrickWorld, TOWER_B, TOWER_H } from './brickphys.js';
+import { Claustro } from './claustro.js';
 
 export const CELL_W = 1.5;
 export const CELL_D = 0.75;
@@ -138,13 +139,15 @@ export class Game {
     this.acc = 0;
     this.catchT = 0;
     this.won = false;
+    this.claustro = null;
+    this.freeBricks = { std: [], metal: [], glass: [], glow: [], tower: [] };
 
     // сетка
     let grid = level.grid.slice();
     if (level.boss) grid = ['', '', ...grid];
     const cols = Math.max(...grid.map((r) => r.length));
     const rows = grid.length;
-    const W = Math.max(10, cols) * CELL_W;
+    const W = (level.claustro ? cols : Math.max(10, cols)) * CELL_W;
     const brickArea = rows * CELL_D;
     const gap = Math.max(11.5, W * 0.62, brickArea * 0.8);
     const depth = 1.0 + brickArea + gap + 1.5;
@@ -169,7 +172,8 @@ export class Game {
     this.pickups = [];
     this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0 };
     this.run.boost ||= defaultBoosts();
-    this.run.nextLife ||= Math.ceil((this.run.score + 1) / LIFE_EVERY) * LIFE_EVERY;
+    this.lifeEvery = level.claustro ? 400000 : LIFE_EVERY;
+    this.run.nextLife ||= Math.ceil((this.run.score + 1) / this.lifeEvery) * this.lifeEvery;
     this.supplyT = 9;
     this.bossMarks = [0.8, 0.6, 0.4, 0.2];
     this.gunCd = 0;
@@ -189,6 +193,7 @@ export class Game {
     // скорость шара растёт с уровнем
     const li = run.levelIndex || 0;
     this.baseSpeed = Math.min(19, 12.5 + li * 0.28) * (level.mods?.speedMul || 1) * (this.chaos.speed || 1) * scale;
+    if (level.claustro) this.claustro = new Claustro(this);
     this.renderer.fitCamera({ minX: -W / 2 - 0.6, maxX: W / 2 + 0.6, minZ: f.zTop - 0.5, maxZ: f.zBottom + 0.3 });
     // прогрев шейдера капсулы бонуса (иначе компиляция при первом выпадении)
     const warm = new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), new THREE.MeshBasicMaterial({ map: label('expand') }));
@@ -209,7 +214,9 @@ export class Game {
     const f = this.field, pal = this.loc.bricks;
     this.brickList = [];
     this.portals = [];
-    const counts = { std: 40, metal: 4, glass: 4, glow: 4, tower: 0 };
+    const counts = this.level.claustro
+      ? { std: 420, metal: 140, glass: 90, glow: 130, tower: 50 }
+      : { std: 40, metal: 4, glass: 4, glow: 4, tower: 0 };
     const portalCells = [];
     grid.forEach((row, r) => {
       for (let c = 0; c < row.length; c++) {
@@ -260,7 +267,7 @@ export class Game {
       this.brickMeshes[cat] = m;
     }
     const f2 = this.field;
-    this.world = new BrickWorld({ minX: -f2.W / 2, maxX: f2.W / 2, minZ: f2.zTop, maxZ: f2.paddleZ - 3 });
+    this.world = new BrickWorld({ minX: -f2.W / 2, maxX: f2.W / 2, minZ: f2.zTop, maxZ: f2.paddleZ - (this.level.claustro ? 0.4 : 3) });
     for (const b of this.brickList) this.world.add(b);
     for (const b of this.brickList) this.assignInstance(b);
     this.wobbling = new Set();
@@ -535,6 +542,7 @@ export class Game {
       this.updateLasers(sdt);
       this.updateSupply(sdt);
     }
+    if (this.claustro) this.claustro.update(sdt);
     if (this.boss && this.boss.alive) {
       this.boss.update(sdt);
       this.bossPush(sdt);
@@ -704,7 +712,7 @@ export class Game {
   // Босс и его орбитали расталкивают кирпичи, не получая урона
   bossPush(dt) {
     const B = this.boss;
-    if (B.dying || B.visible < 0.5 || dt <= 0) return;
+    if (!B || !B.alive || B.dying || B.visible < 0.5 || dt <= 0) return;
     const W = this.world;
     const vx = (B.x - (B._px ?? B.x)) / dt, vz = (B.z - (B._pz ?? B.z)) / dt;
     B._px = B.x; B._pz = B.z;
@@ -814,6 +822,7 @@ export class Game {
   destroyBrick(b, src = {}) {
     b.alive = false;
     this.world.remove(b);
+    this.freeBrick(b);
     this.writeBrick(b);
     this.remaining--;
     this.bricksBroken++;
@@ -837,6 +846,64 @@ export class Game {
     else if (Math.random() < (this.level.bonus ? 0.04 : 0.085)) this.spawnPowerup(b.x, b.z);
     if (b.regen) b.regenT = 9;
     this.checkClear();
+  }
+
+  // ——— Динамические кирпичи (режим «Клаустрофобия») ———
+  freeBrick(b) {
+    if (this.claustro && !b.regen && !this.freeBricks[b.cat].includes(b)) this.freeBricks[b.cat].push(b);
+  }
+
+  spawnBrickAt(ch, x, z, rowN = 0) {
+    const t = TYPE[ch] || TYPE['1'];
+    const cat = t.cat;
+    let b = this.freeBricks[cat].pop();
+    const fresh = !b;
+    if (fresh) {
+      if (!this.brickMeshes[cat] || this.catCount[cat] >= this.brickMeshes[cat].count) return null;
+      b = { color: new THREE.Color(), base: new THREE.Color(), i: -1 };
+    }
+    const hp = Math.min(t.hp, 3); // в «Клаустрофобии» самые крепкие — 3 удара
+    Object.assign(b, {
+      ch, c: 0, r: rowN, x, z, a: 0, hp, maxHp: hp, cat, steel: false, explosive: !!t.explosive, bonus: !!t.bonus,
+      secret: false, hidden: false, revealed: false, regen: false, gold: !!t.gold, tower: !!t.tower, alive: true,
+      wy: 0, wvy: 0, wrx: 0, wvrx: 0, wrz: 0, wvrz: 0, appear: 0.05, regenT: 0,
+    });
+    b.color.set(t.color || this.loc.bricks[rowN % this.loc.bricks.length]);
+    b.base.copy(b.color);
+    this.world.add(b);
+    if (fresh) { this.brickList.push(b); this.assignInstance(b); }
+    else this.brickMeshes[cat].setColorAt(b.inst, this.brickColor(b));
+    this.brickMeshes[cat].instanceColor.needsUpdate = true;
+    this.remaining++;
+    this.wobbling.add(b);
+    return b;
+  }
+
+  // Смена ширины поля и локации без перезагрузки уровня
+  rebuildStage(cols, locIdx) {
+    const f = this.field;
+    this.weather.dispose();
+    this.env.dispose();
+    f.cols = cols;
+    f.W = cols * CELL_W;
+    f.ox = -f.W / 2;
+    this.loc = LOCATIONS[locIdx % LOCATIONS.length];
+    this.audio.setLocation(this.loc.id);
+    document.documentElement.style.setProperty('--loc', this.loc.accent);
+    this.env = new Environment(this.scene, this.loc, f);
+    this.weather = new Weather(this.scene, this.loc, f, this);
+    // новая сетка физики под новую ширину
+    const old = this.world;
+    this.world = new BrickWorld({ minX: -f.W / 2, maxX: f.W / 2, minZ: f.zTop, maxZ: f.paddleZ - 0.4 });
+    for (const b of this.brickList) if (b.alive) { const hz = b.homeZ; this.world.add(b); b.homeZ = hz; }
+    old.awake.clear();
+    // щит под ракеткой
+    this.scene.remove(this.shieldMesh);
+    this.shieldMesh.geometry.dispose(); this.shieldMesh.material.dispose();
+    this.buildShield();
+    this.renderer.fitCamera({ minX: -f.W / 2 - 0.6, maxX: f.W / 2 + 0.6, minZ: f.zTop - 0.5, maxZ: f.zBottom + 0.3 });
+    this.renderer.setScene(this.scene);
+    this.ui.levelIntro({ ...this.level, name: 'Клаустрофобия' }, this.loc, null, true);
   }
 
   pushNeighbors(x, z, radius, strength) {
@@ -1216,6 +1283,17 @@ export class Game {
         this.audio.laser();
       }
     }
+    // «Клаустрофобия»: слабая автопушка, когда нет лазера/пулемёта
+    if (this.claustro && this.state === 'play' && !(this.effects.laser > 0) && !(this.effects.gun > 0) && !this.won) {
+      this.cannonCd = (this.cannonCd ?? 0.5) - dt;
+      if (this.cannonCd <= 0) {
+        this.cannonCd = 0.4;
+        const m = new THREE.Mesh(geos().laser, this.cannonMat || (this.cannonMat = glow('#e8e3d3', 2.2)));
+        m.position.set(p.x, 0.55, p.z - 0.5);
+        this.scene.add(m);
+        this.lasers.push({ x: p.x, z: p.z - 0.5, m, gun: true, cannon: true });
+      }
+    }
     if (this.effects.gun > 0 && this.state === 'play') {
       this.gunCd -= dt;
       if (this.gunCd <= 0) {
@@ -1245,7 +1323,7 @@ export class Game {
       }
       if (!dead && this.boss && this.boss.alive && !this.boss.dying && Math.hypot(L.x - this.boss.x, L.z - this.boss.z) < this.boss.r) {
         dead = true;
-        if (!(this.boss.type === 'hydra' && this.boss.orbiters.some((o) => o.alive))) this.boss.damage(L.gun ? 0.22 : 0.34, L.x, L.z);
+        if (!(this.boss.type === 'hydra' && this.boss.orbiters.some((o) => o.alive))) this.boss.damage(L.cannon ? 0.1 : L.gun ? 0.22 : 0.34, L.x, L.z);
       }
       if (dead) {
         this.fx.sparksAt(L.x, 0.5, L.z, '#ff8a70', 5, 3, { size: 0.1, life: 0.25 });
@@ -1345,8 +1423,8 @@ export class Game {
     const pts = Math.round(n * mul);
     this.run.score += pts;
     if (this.run.score >= this.run.nextLife && !this.run.demo) {
-      this.run.nextLife += LIFE_EVERY;
-      this.giveLife(`+1 ЖИЗНЬ · ${fmtK(this.run.nextLife - LIFE_EVERY)} ОЧКОВ`);
+      this.run.nextLife += this.lifeEvery;
+      this.giveLife(`+1 ЖИЗНЬ · ${fmtK(this.run.nextLife - this.lifeEvery)} ОЧКОВ`);
     }
     if (!quiet && x !== undefined && pts >= 50) this.ui.popup(this, x, z, pts, mul > 1 ? mul : 0);
   }
@@ -1381,12 +1459,14 @@ export class Game {
   }
 
   checkClear() {
+    if (this.claustro) return;
     if (this.state !== 'play' && this.state !== 'ready') return;
     const bossAlive = this.boss && this.boss.alive;
     if (this.remaining <= 0 && !bossAlive) this.levelClear();
   }
 
   onBossDying() {
+    if (this.claustro) { this.slowmo = 1.4; this.audio.bossRoar(); this.ui.toast('КРИТИЧЕСКИЙ УРОН', 'boss'); return; }
     this.won = true;
     this.slowmo = 1.6;
     this.audio.bossRoar();
@@ -1394,6 +1474,7 @@ export class Game {
   }
 
   onBossDead(boss) {
+    if (this.claustro) { this.claustro.onBossDead(boss); return; }
     this.addScore(10000, boss.x, boss.z);
     this.giveLife('+1 ЖИЗНЬ ЗА БОССА');
     profile.bossesDefeated++;
@@ -1436,6 +1517,7 @@ export class Game {
       score: this.run.score, lives: this.run.lives, time: this.levelTime, bricks: this.bricksBroken,
       maxCombo: this.maxCombo, star: this.starFound, perfect: !this.lostBall, timeBonus,
       boss: !!this.level.boss,
+      dist: this.claustro ? Math.floor(this.claustro.dist) : 0, bosses: this.claustro ? this.claustro.bossN : 0,
     };
   }
 
@@ -1476,10 +1558,17 @@ export class Game {
       _v.x += (1 - e) * 10;
     }
     _v.x += this.paddle.x * 0.05;
-    _v.add(this.fx.shakeOffset);
-    cam.position.copy(_v);
     _tgt.copy(base.target);
     _tgt.x += this.paddle.x * 0.03;
+    if (this.claustro && e >= 1) {
+      // плавный отъезд камеры при расширении поля
+      const k2 = 1 - Math.exp(-dt * 2.2);
+      (this.camCur ||= _v.clone()).lerp(_v, k2);
+      (this.camTgt ||= _tgt.clone()).lerp(_tgt, k2);
+      _v.copy(this.camCur); _tgt.copy(this.camTgt);
+    } else { this.camCur = null; this.camTgt = null; }
+    _v.add(this.fx.shakeOffset);
+    cam.position.copy(_v);
     cam.lookAt(_tgt);
   }
 
@@ -1490,6 +1579,7 @@ export class Game {
 
   dispose() {
     if (!this.scene) return;
+    this.claustro?.dispose();
     this.weather?.dispose();
     this.env?.dispose();
     this.boss?.dispose();

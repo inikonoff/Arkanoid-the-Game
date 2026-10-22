@@ -121,6 +121,12 @@ class App {
     this.startLevel(lv);
   }
 
+  playClaustro() {
+    this.run = { mode: 'claustro', levelIndex: 6, score: 0, lives: cheats.adrenaline ? 1 : 3 };
+    const loc = 0;
+    this.startLevel({ claustro: true, id: null, name: 'Клаустрофобия', location: loc, grid: Array(14).fill('.'.repeat(7)) });
+  }
+
   playCustom(level) {
     this.customLevel = level;
     this.run = { mode: 'custom', levelIndex: Math.round(level.opts.difficulty * 18), score: 0, lives: cheats.adrenaline ? 1 : 3 };
@@ -180,6 +186,21 @@ class App {
   onGameOver(res) {
     if (this.run.demo) { this.startDemo(); return; }
     const best = this.updateBest();
+    if (this.run.mode === 'claustro') {
+      const key = this.run.cheated ? 'bestDistCheat' : 'bestDist';
+      const newDist = res.dist > (profile[key] || 0);
+      profile[key] = Math.max(profile[key] || 0, res.dist);
+      saveProfile();
+      this.mode = 'result';
+      this.ui.setHud(false);
+      this.ui.showGameOver([
+        { k: 'ДИСТАНЦИЯ', v: `${res.dist} м`, cls: 'total' },
+        { k: this.run.cheated ? 'РЕКОРД*' : 'РЕКОРД', v: newDist ? 'НОВЫЙ!' : `${profile[key]} м` },
+        { k: 'БОССОВ ПОВЕРЖЕНО', v: res.bosses },
+        { k: 'СЧЁТ', v: fmt(this.run.score) },
+      ]);
+      return;
+    }
     if (this.run.mode === 'campaign' || this.run.mode === 'endless') profile.saved = null;
     saveProfile();
     this.mode = 'result';
@@ -195,6 +216,7 @@ class App {
   retry() {
     const r = this.run;
     if (r.mode === 'custom') return this.playCustom(this.customLevel);
+    if (r.mode === 'claustro') return this.playClaustro();
     if (r.mode === 'endless') return this.playEndless(r.levelIndex);
     if (this.currentLevel.bonus) return this.playCampaign(r.levelIndex);
     this.playCampaign(r.levelIndex);

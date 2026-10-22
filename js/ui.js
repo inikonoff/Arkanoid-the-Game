@@ -142,6 +142,7 @@ export class UI {
     items.push({ lbl: 'Локации', meta: `${Math.min(CAMPAIGN.length, profile.maxLevel + 1)}/${CAMPAIGN.length}`, act: () => this.show('levels') });
     items.push({ lbl: 'Генератор', meta: '∞ УРОВНЕЙ', act: () => this.show('generator') });
     items.push({ lbl: 'Бесконечный', meta: 'ВЫЖИВАНИЕ', act: () => this.app.playEndless() });
+    items.push({ lbl: 'Клаустрофобия', meta: profile.bestDist ? `РЕКОРД ${profile.bestDist} М` : 'НАТИСК', act: () => this.app.playClaustro() });
     if (profile.chaosUnlocked) items.push({ lbl: 'Режим хаоса', meta: `<b>${profile.chaosMode ? 'ВКЛ' : 'ВЫКЛ'}</b>`, toggle: true, act: () => { profile.chaosMode = !profile.chaosMode; saveProfile(); this.buildMenu(); } });
     const nOn = Object.keys(TOGGLE_LABELS).filter((k) => cheats[k]).length;
     items.push({ lbl: 'Чёрный ход', meta: nOn ? `<b>${nOn} АКТИВНО</b>` : 'ДЛЯ СЛАБАКОВ', toggle: nOn > 0, act: () => this.show('backdoor') });
@@ -427,6 +428,7 @@ export class UI {
       <div class="help-card"><h3>БОНУСЫ</h3><ul>${pu}</ul></div>
       <div class="help-card"><h3>БУСТЕРЫ</h3><ul>${Object.values(BOOSTERS).map((B) => `<li><i class="sw" style="background:${B.color}"></i><span><span class="tag">${B.key}</span><b>${B.label}</b> — ${B.desc}, ${B.dur} с.</span></li>`).join('')}
         <li><span class="tag">+</span><span>Кнопки справа или клавиши 1–4. В начале забега — по одному заряду, максимум ${BOOST_MAX}. Новые заряды: капсула «ЗАРЯД», каждая новая фаза босса.</span></li></ul></div>
+      <div class="help-card"><h3>КЛАУСТРОФОБИЯ</h3><p>Стена блоков непрерывно надвигается на ракетку — не дай ей пересечь красную линию (прорыв стоит жизни). Поле узкое, на ракетке слабая автопушка. Каждые ~200 м — босс: он висит на месте, а блоки едут мимо. Победа взрывает весь экран бонусами, поле становится шире, локация меняется. Стали нет, самые крепкие блоки — 3 удара. Счёт — в метрах.</p></div>
       <div class="help-card"><h3>ЖИЗНИ И СНАБЖЕНИЕ</h3><p>+1 жизнь за каждого побеждённого босса и за каждые 30 000 очков (максимум 7). В бою с боссом оружие сбрасывается сверху каждые 11–16 секунд, даже когда поле пустое, а каждые 20% здоровья босса из него выпадает капсула.</p></div>
       <div class="help-card"><h3>ПОГОДА И ФИЗИКА</h3><ul>
         ${LOCATIONS.map((l) => `<li><i class="sw" style="background:${l.accent}"></i><span><b>${l.tag}</b> — ${l.desc}</span></li>`).join('')}
@@ -472,6 +474,12 @@ export class UI {
     set('timer', game.bonusTimer > 0 ? Math.ceil(game.bonusTimer) : 0, (v) => { const e = $('#h-timer'); e.classList.toggle('hidden', !v); e.textContent = `БОНУС · ${v} С`; });
     const ch = Object.keys(TOGGLE_LABELS).filter((k) => cheats[k] && k !== 'tourist').map((k) => TOGGLE_LABELS[k]).join(' · ');
     set('cheats', ch, (v) => { const e = $('#h-cheats'); e.classList.toggle('hidden', !v); e.textContent = v; });
+    if (game.claustro) {
+      const cl = game.claustro;
+      set('dist', Math.floor(cl.dist), (v) => {
+        $('#h-level').textContent = game.boss ? `${v} м · БОСС` : `${v} м · босс ${Math.max(0, Math.ceil(cl.nextBoss - cl.dist))} м`;
+      });
+    }
     const ready = game.balls.some((b) => b.stuck) && (game.state === 'ready' || game.state === 'play') && !game.catchT;
     set('hint', ready, (v) => $('#h-hint').classList.toggle('hidden', !v));
     const boss = game.boss;
@@ -527,7 +535,7 @@ export class UI {
     this.resetHud();
     if (this.app.run?.demo) return;
     const n = this.app.run.levelIndex;
-    $('#i-code').textContent = level.bonus ? 'БОНУС-УРОВЕНЬ' : level.generated && this.app.run.mode === 'custom' ? `СИД ${String(level.seed).toUpperCase()}` : `LV ${String(n + 1).padStart(2, '0')} / ${loc.code}`;
+    $('#i-code').textContent = level.claustro ? 'РЕЖИМ · КЛАУСТРОФОБИЯ' : level.bonus ? 'БОНУС-УРОВЕНЬ' : level.generated && this.app.run.mode === 'custom' ? `СИД ${String(level.seed).toUpperCase()}` : `LV ${String(n + 1).padStart(2, '0')} / ${loc.code}`;
     $('#i-loc').textContent = loc.tag;
     $('#i-name').textContent = level.name;
     $('#i-weather').textContent = WEATHER_INFO[loc.weather].label;
