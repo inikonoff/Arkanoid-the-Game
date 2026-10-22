@@ -13,6 +13,7 @@ import { vibrate } from './audio.js';
 import { BrickWorld, TOWER_B, TOWER_H } from './brickphys.js';
 import { Claustro } from './claustro.js';
 import { installSupers, superEffects, BOOST_SUPER } from './supers.js';
+import { allowedSet, chainsAllowed } from './unlocks.js';
 
 export const CELL_W = 1.5;
 export const CELL_D = 0.75;
@@ -50,10 +51,11 @@ export const defaultBoosts = () => ({ field: 1, gun: 1, armor: 1, sticky: 1 });
 
 // Пул снабжения в бою с боссом: только полезное, оружие чаще
 const SUPPLY = [['gravity', 2], ['multi', 4], ['laser', 4], ['fire', 3], ['mega', 3], ['cell', 3], ['expand', 3], ['shield', 2], ['catch', 2], ['slow', 2], ['life', 0.5]];
-function pickSupply() {
-  let r = Math.random() * SUPPLY.reduce((a, s) => a + s[1], 0);
-  for (const [k, w] of SUPPLY) { r -= w; if (r <= 0) return k; }
-  return 'laser';
+function pickSupply(allowed) {
+  const pool = allowed ? SUPPLY.filter(([k]) => allowed.has(k)) : SUPPLY;
+  let r = Math.random() * pool.reduce((a, s) => a + s[1], 0);
+  for (const [k, w] of pool) { r -= w; if (r <= 0) return k; }
+  return pool[0]?.[0] || 'expand';
 }
 const LIFE_EVERY = 30000;
 const fmtK = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -174,6 +176,8 @@ export class Game {
     this.pickups = [];
     this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0, gravity: 0, ...superEffects() };
     this.chains = {};
+    this.allowed = allowedSet(run, level);
+    this.chainsOn = chainsAllowed(run);
     this.beams = [];
     this.burnQ = [];
     this.sats = [];
@@ -1108,8 +1112,10 @@ export class Game {
 
   // ———————————————————————— Бонусы ————————————————————————
   spawnPowerup(x, z, type) {
+    // закрытые бонусы ещё не выпадают — подменяем случайным открытым
+    if (type && this.allowed && !this.allowed.has(type)) type = undefined;
     if (!type) {
-      const pool = Object.entries(POWERUPS);
+      const pool = Object.entries(POWERUPS).filter(([k]) => !this.allowed || this.allowed.has(k));
       let tot = pool.reduce((a, [, p]) => a + p.w, 0), r = Math.random() * tot;
       for (const [k, p] of pool) { r -= p.w; if (r <= 0) { type = k; break; } }
       type = type || 'expand';
@@ -1461,13 +1467,13 @@ export class Game {
     if (this.supplyT <= 0 && this.powerups.length < 3) {
       this.supplyT = 11 + Math.random() * 5;
       const x = (Math.random() - 0.5) * (f.W - 3);
-      this.spawnPowerup(x, f.brickBottom + 0.5, pickSupply());
+      this.spawnPowerup(x, f.brickBottom + 0.5, pickSupply(this.allowed));
       this.fx.sparksAt(x, 0.8, f.brickBottom + 0.5, '#ffffff', 14, 3);
     }
     // за каждые 20% здоровья босса — капсула прямо из него
     while (this.bossMarks.length && B.ratio <= this.bossMarks[0]) {
       this.bossMarks.shift();
-      this.spawnPowerup(B.x, B.z + B.r + 0.4, Math.random() < 0.35 ? 'cell' : pickSupply());
+      this.spawnPowerup(B.x, B.z + B.r + 0.4, Math.random() < 0.35 && this.allowed.has('cell') ? 'cell' : pickSupply(this.allowed));
     }
   }
 

@@ -48,7 +48,7 @@ const SuperMixin = {
       return;
     }
     const sup = CHAINS[type];
-    if (!sup) return;
+    if (!sup || !this.chainsOn) return;
     const c = (this.chains[type] ||= { n: 0, t: 0 });
     if (this.time - c.t > CHAIN_WINDOW) c.n = 0;
     c.n++;

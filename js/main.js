@@ -9,6 +9,7 @@ import { CAMPAIGN } from './levels.js';
 import { generateLevel, endlessLevel } from './generator.js';
 import { LOCATIONS } from './locations.js';
 import { applyPending, gameplayCheatsOn, cheats, rewardOptions, grantCode } from './cheats.js';
+import { newUnlocksFor, markSeen } from './unlocks.js';
 
 const bootFill = document.getElementById('boot-fill');
 const bootText = document.getElementById('boot-text');
@@ -87,6 +88,14 @@ class App {
     this.audio.unlock();
     this.game.load(level, this.run);
     this.game.autoplay = false;
+    // новый бонус открылся на этом уровне — показываем карточку после интро
+    if (this.run.mode === 'campaign' && this.run.levelIndex >= (profile.maxLevel || 0)) {
+      const fresh = newUnlocksFor(this.run.levelIndex);
+      if (fresh.length) {
+        const id = this.game.loadId;
+        setTimeout(() => { if (this.game.loadId === id && this.mode === 'play') { this.ui.showUnlock(fresh); markSeen(fresh); } }, 2300);
+      }
+    }
     vibrate.enabled = true;
     this.audio.startMusic();
     this.needsRebuild = false;

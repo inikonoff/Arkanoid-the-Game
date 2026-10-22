@@ -6,6 +6,13 @@ import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts }
 import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
 import { cheats, enterCode, TOGGLE_LABELS, ownedCodes, TOTAL_CODES } from './cheats.js';
 import { SUPER_FX, CHAINS, CHAIN_NEED, BOOST_SUPER_LABEL } from './supers.js';
+import { UNLOCK_AT, CHAINS_AT, reachOf } from './unlocks.js';
+
+const POWER_DESC = {
+  expand: 'Шире ракетка (до 2 уровней).', multi: 'Каждый шар делится на три.', laser: 'Автоматические лазерные пушки.', catch: 'Шар прилипает, отпусти касанием.',
+  slow: 'Замедляет шары.', fire: 'Шар прожигает кирпичи насквозь.', shield: 'Барьер внизу на 3 отскока.', mega: '3 заряда: следующий удар — мегавзрыв.',
+  life: 'Дополнительная жизнь.', shrink: 'Ловушка: ракетка уже.', fast: 'Ловушка: шары быстрее.', cell: '+1 заряд случайного бустера.', gravity: 'Падающий шар притягивает к ракетке, 15 с.',
+};
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -80,6 +87,7 @@ export class UI {
     if (id === 'generator') this.buildGenerator();
     if (id === 'settings') this.buildSettings();
     if (id === 'backdoor') this.buildBackdoor();
+    if (id === 'help') this.buildHelp();
     if (id === 'pause') $('#pause [data-act="skip"]').classList.toggle('hidden', !cheats.tourist);
     this.app.audio.ui();
   }
@@ -354,6 +362,19 @@ export class UI {
     return row;
   }
 
+  // ——— Карточка «НОВЫЙ БОНУС» ———
+  showUnlock(items) {
+    let card = $('#unlock');
+    if (!card) { card = el('div', 'unlock-card'); card.id = 'unlock'; document.body.appendChild(card); }
+    card.innerHTML = `<div class="mono accent uc-k">${items.length > 1 ? 'НОВЫЕ БОНУСЫ' : 'НОВЫЙ БОНУС'}</div>` + items.map((k) => {
+      if (k === 'chains') return `<div class="uc-row"><i style="background:#d9c2ff"></i><b>СБОРКИ</b><span>3 одинаковых бонуса за 20 с → супер-версия</span></div>`;
+      const P = POWERUPS[k];
+      return `<div class="uc-row"><i style="background:${P.color}"></i><b>${P.label}</b><span>${POWER_DESC[k] || ''}</span></div>`;
+    }).join('');
+    card.classList.remove('show'); void card.offsetWidth; card.classList.add('show');
+    this.app.audio.star();
+  }
+
   // ——— Трофей: выбор кода ———
   showReward(opts, done) {
     const box = $('#rw-cards'), fin = $('#rw-done');
@@ -442,11 +463,10 @@ export class UI {
   // ——— Справка ———
   buildHelp() {
     const b = $('#help-body');
-    const pu = Object.entries(POWERUPS).map(([, p]) => `<li><i class="sw" style="background:${p.color}"></i><span><span class="tag">${p.label}</span>${{
-      ШИРЕ: 'Шире ракетка (до 2 уровней).', '×3': 'Каждый шар делится на три.', ЛАЗЕР: 'Автоматические лазерные пушки.', МАГНИТ: 'Шар прилипает, отпусти касанием.',
-      'МЕДЛ.': 'Замедляет шары.', ОГОНЬ: 'Шар прожигает кирпичи насквозь.', ЩИТ: 'Барьер внизу на 3 отскока.', БОМБА: '3 заряда: следующий удар — мегавзрыв.',
-      '+1': 'Дополнительная жизнь.', УЖЕ: 'Ловушка: ракетка уже.', 'БЫСТР.': 'Ловушка: шары быстрее.', ЗАРЯД: '+1 заряд случайного бустера.', ГРАВИТАЦИЯ: 'Падающий шар притягивает к ракетке, 15 с.',
-    }[p.label] || ''}</span></li>`).join('');
+    const reach = reachOf(null);
+    const pu = Object.entries(POWERUPS).sort((a, b) => (UNLOCK_AT[a[0]] ?? 0) - (UNLOCK_AT[b[0]] ?? 0)).map(([k, p]) => ((UNLOCK_AT[k] ?? 0) <= reach
+      ? `<li><i class="sw" style="background:${p.color}"></i><span><span class="tag">${p.label}</span>${POWER_DESC[k] || ''}</span></li>`
+      : `<li><i class="sw" style="background:var(--faint)"></i><span class="dim"><span class="tag">???</span>Откроется на уровне ${UNLOCK_AT[k] + 1}.</span></li>`)).join('');
     const bricks = [
       ['#e8562a', 'Обычный — 1–3 удара, цвет темнеет с уроном.'], ['#8d99ae', 'Броня — 5 ударов.'], ['#3a3d45', 'Сталь — неразрушима, даже огнём.'],
       ['#e2b44c', 'Золото — 500 очков.'], ['#ff3d1f', 'Взрывчатка — цепные реакции.'], ['#bfe9ff', 'Стекло — рассыпается на сотни осколков.'],
@@ -462,7 +482,7 @@ export class UI {
       <div class="help-card"><h3>БОНУСЫ</h3><ul>${pu}</ul></div>
       <div class="help-card"><h3>БУСТЕРЫ</h3><ul>${Object.values(BOOSTERS).map((B) => `<li><i class="sw" style="background:${B.color}"></i><span><span class="tag">${B.key}</span><b>${B.label}</b> — ${B.desc}, ${B.dur} с.</span></li>`).join('')}
         <li><span class="tag">+</span><span>Кнопки справа или клавиши 1–4. В начале забега — по одному заряду, максимум ${BOOST_MAX}. Новые заряды: капсула «ЗАРЯД», каждая новая фаза босса.</span></li></ul></div>
-      <div class="help-card"><h3>СБОРКИ И СУПЕРЫ</h3><ul>
+      <div class="help-card"><h3>СБОРКИ И СУПЕРЫ${reach >= CHAINS_AT ? '' : ` · <span class="dim">ОТКРОЮТСЯ НА УРОВНЕ ${CHAINS_AT + 1}</span>`}</h3><ul>
         <li><span class="tag">×3</span><span>Поймай 3 одинаковых бонуса за 20 с — получишь супер-версию: ЛАЗЕР → Рельсотрон, ОГОНЬ → Инферно, ×3 → Рой, ЩИТ → Купол, ШИРЕ → Титан, БОМБА → Ядерка, МАГНИТ → Гравитрон, МЕДЛ. → Стоп-кадр, ЗАРЯД → Перезарядка. Прогресс видно в HUD (◆◆◇).</span></li>
         <li><span class="tag">!</span><span>Ловушки «УЖЕ» и «БЫСТР.» сбрасывают все незавершённые сборки — уворачивайся.</span></li>
         <li><span class="tag">3/3</span><span>Бустер с полным запасом светится «СУПЕР»: нажатие тратит все 3 заряда на усиленную версию — Купол, Минигун, Двойная броня (отражает выстрелы в босса), Прицел (показывает траекторию запуска).</span></li>
