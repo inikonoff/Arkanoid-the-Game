@@ -4,6 +4,7 @@ import { LOCATIONS, WEATHER_INFO } from './locations.js';
 import { CAMPAIGN } from './levels.js';
 import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts } from './generator.js';
 import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
+import { cheats, enterCode, TOGGLE_LABELS } from './cheats.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -77,6 +78,8 @@ export class UI {
     if (id === 'levels') this.buildLevels();
     if (id === 'generator') this.buildGenerator();
     if (id === 'settings') this.buildSettings();
+    if (id === 'backdoor') this.buildBackdoor();
+    if (id === 'pause') $('#pause [data-act="skip"]').classList.toggle('hidden', !cheats.tourist);
     this.app.audio.ui();
   }
 
@@ -101,6 +104,8 @@ export class UI {
       if (a === 'resume') this.app.resume();
       if (a === 'restart') this.app.restart();
       if (a === 'settings') this.show('settings');
+      if (a === 'backdoor') this.show('backdoor');
+      if (a === 'skip') this.app.skipLevel();
       if (a === 'quit') this.app.quitToMenu();
     });
     $('#result').addEventListener('click', (e) => {
@@ -138,6 +143,8 @@ export class UI {
     items.push({ lbl: 'Генератор', meta: '∞ УРОВНЕЙ', act: () => this.show('generator') });
     items.push({ lbl: 'Бесконечный', meta: 'ВЫЖИВАНИЕ', act: () => this.app.playEndless() });
     if (profile.chaosUnlocked) items.push({ lbl: 'Режим хаоса', meta: `<b>${profile.chaosMode ? 'ВКЛ' : 'ВЫКЛ'}</b>`, toggle: true, act: () => { profile.chaosMode = !profile.chaosMode; saveProfile(); this.buildMenu(); } });
+    const nOn = Object.keys(TOGGLE_LABELS).filter((k) => cheats[k]).length;
+    items.push({ lbl: 'Чёрный ход', meta: nOn ? `<b>${nOn} АКТИВНО</b>` : 'ДЛЯ СЛАБАКОВ', toggle: nOn > 0, act: () => this.show('backdoor') });
     items.push({ lbl: 'Настройки', meta: ({ auto: 'АВТО', ultra: 'УЛЬТРА', high: 'ВЫСОКО', medium: 'СРЕДНЕ', low: 'НИЗКО', potato: 'КАРТОШКА', custom: 'СВОЁ' })[settings.preset] || 'СВОЁ', act: () => this.show('settings') });
     items.push({ lbl: 'Как играть', meta: 'МАНУАЛ', act: () => this.show('help') });
     items.forEach((it, i) => {
@@ -147,7 +154,7 @@ export class UI {
       list.appendChild(b);
     });
     const stars = profile.stars.length, totalStars = CAMPAIGN.filter((l) => l.grid.some((r) => r.includes('S'))).length;
-    $('#menu-stats').innerHTML = `<span>РЕКОРД</span><b>${fmt(profile.bestScore)}</b><span>КРИСТАЛЛЫ</span><b>${stars}/${totalStars}</b><span>БОССЫ</span><b>${profile.bossesDefeated}</b>`;
+    $('#menu-stats').innerHTML = `<span>РЕКОРД</span><b>${fmt(profile.bestScore)}</b>${(profile.bestCheat || 0) > profile.bestScore ? `<span>РЕКОРД*</span><b>${fmt(profile.bestCheat)}</b>` : ''}<span>КРИСТАЛЛЫ</span><b>${stars}/${totalStars}</b><span>БОССЫ</span><b>${profile.bossesDefeated}</b>`;
   }
 
   // ——— Локации ———
@@ -345,6 +352,58 @@ export class UI {
     return row;
   }
 
+  // ——— Чёрный ход ———
+  buildBackdoor() {
+    const log = $('#bd-log');
+    if (!log.childElementCount) this.termLine('KINETIC SECURE SHELL v1.4 · ВВЕДИТЕ КОД ДОСТУПА', 'dim');
+    const form = $('#bd-form'), inp = $('#bd-input');
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const v = inp.value.trim();
+      if (!v) return;
+      this.termLine('> ' + v.toUpperCase(), 'cmd');
+      const res = enterCode(this.app, v);
+      inp.value = '';
+      if (!res) { this.termLine('ОТМЕНЕНО', 'dim'); return; }
+      if (res.ok) {
+        this.termLine('ДОСТУП РАЗРЕШЁН', 'ok');
+        this.termLine(res.text, 'ok');
+        this.app.audio.star();
+        this.app.audio.unlock();
+      } else {
+        this.termLine(res.text, 'bad');
+        this.app.audio.lose();
+        const t = $('.term'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
+      }
+      this.renderCheatToggles();
+    };
+    this.renderCheatToggles();
+    setTimeout(() => { if (matchMedia('(hover: hover)').matches) inp.focus(); }, 50);
+  }
+
+  termLine(text, cls = '') {
+    const log = $('#bd-log');
+    const d = el('div', 'tl ' + cls);
+    d.textContent = text;
+    log.appendChild(d);
+    while (log.childElementCount > 40) log.firstChild.remove();
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // Активные режимы — можно выключить касанием
+  renderCheatToggles() {
+    const box = $('#bd-active');
+    const on = Object.keys(TOGGLE_LABELS).filter((k) => cheats[k]);
+    const pend = [cheats.pendingArsenal && 'АРСЕНАЛ ждёт новой игры', cheats.pendingCat && 'КОШКА ждёт новой игры'].filter(Boolean);
+    box.innerHTML = on.length || pend.length ? '<div class="mono dim ta-h">АКТИВНЫЕ РЕЖИМЫ · КОСНИСЬ, ЧТОБЫ ВЫКЛЮЧИТЬ</div>' : '';
+    for (const k of on) {
+      const b = el('button', 'chipbtn on', TOGGLE_LABELS[k] + ' ✕');
+      b.addEventListener('click', () => { cheats[k] = false; saveProfile(); this.termLine(`${TOGGLE_LABELS[k]}: ВЫКЛ`, 'dim'); this.renderCheatToggles(); });
+      box.appendChild(b);
+    }
+    for (const t of pend) box.appendChild(el('span', 'chipbtn', t));
+  }
+
   // ——— Справка ———
   buildHelp() {
     const b = $('#help-body');
@@ -373,7 +432,7 @@ export class UI {
         ${LOCATIONS.map((l) => `<li><i class="sw" style="background:${l.accent}"></i><span><b>${l.tag}</b> — ${l.desc}</span></li>`).join('')}
       </ul></div>
       <div class="help-card"><h3>БОССЫ</h3><p>Каждый третий уровень — босс со щитами, фазами и своими атаками. Попадания по ракетке оглушают её, лучи замораживают, чернила кракена закрывают обзор. В ярости босс призывает подкрепление.</p></div>
-      <div class="help-card"><h3>СЕКРЕТЫ</h3><p>В некоторых уровнях спрятаны невидимые кирпичи с кристаллами — их выдают редкие искры. Поймай кристалл ракеткой, и откроются варп-врата в бонус-уровень. Говорят, логотип скрывает ещё кое-что…</p></div>`;
+      <div class="help-card"><h3>СЕКРЕТЫ</h3><p>В некоторых уровнях спрятаны невидимые кирпичи с кристаллами — их выдают редкие искры. Поймай кристалл ракеткой, и откроются варп-врата в бонус-уровень. Говорят, логотип скрывает ещё кое-что… А для тех, кому совсем тяжело, в меню есть «Чёрный ход».</p></div>`;
   }
 
   // ——— HUD ———
@@ -405,12 +464,14 @@ export class UI {
     const set = (k, v, fn) => { if (c[k] !== v) { c[k] = v; fn(v); } };
     set('score', game.run.score, (v) => { $('#h-score').textContent = fmt(v); });
     set('lives', game.run.lives, (v) => {
-      $('#h-lives').innerHTML = Array.from({ length: Math.max(3, Math.min(7, v)) }, (_, i) => `<i class="${i < v ? '' : 'off'}"></i>`).join('');
+      $('#h-lives').innerHTML = Array.from({ length: Math.max(3, Math.min(9, v)) }, (_, i) => `<i class="${i < v ? '' : 'off'}"></i>`).join('');
     });
     set('weather', game.weather.hud, (v) => { $('#h-weather').textContent = `${WEATHER_INFO[game.weather.type]?.label || ''} · ${v}`; });
     const mul = 1 + Math.min(12, Math.floor(game.combo / 4)) * 0.25;
     set('combo', mul, (v) => { const e = $('#h-combo'); e.classList.toggle('hidden', v <= 1); e.textContent = `КОМБО ×${v.toFixed(2)}`; });
     set('timer', game.bonusTimer > 0 ? Math.ceil(game.bonusTimer) : 0, (v) => { const e = $('#h-timer'); e.classList.toggle('hidden', !v); e.textContent = `БОНУС · ${v} С`; });
+    const ch = Object.keys(TOGGLE_LABELS).filter((k) => cheats[k] && k !== 'tourist').map((k) => TOGGLE_LABELS[k]).join(' · ');
+    set('cheats', ch, (v) => { const e = $('#h-cheats'); e.classList.toggle('hidden', !v); e.textContent = v; });
     const ready = game.balls.some((b) => b.stuck) && (game.state === 'ready' || game.state === 'play') && !game.catchT;
     set('hint', ready, (v) => $('#h-hint').classList.toggle('hidden', !v));
     const boss = game.boss;

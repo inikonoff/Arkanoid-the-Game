@@ -8,6 +8,7 @@ import { Input } from './input.js';
 import { CAMPAIGN } from './levels.js';
 import { generateLevel, endlessLevel } from './generator.js';
 import { LOCATIONS } from './locations.js';
+import { applyPending, gameplayCheatsOn, cheats } from './cheats.js';
 
 const bootFill = document.getElementById('boot-fill');
 const bootText = document.getElementById('boot-text');
@@ -77,6 +78,8 @@ class App {
     this.mode = 'play';
     this.paused = false;
     this.currentLevel = level;
+    applyPending(this.run);
+    if (gameplayCheatsOn()) this.run.cheated = true;
     this.levelStart = { score: this.run.score, lives: this.run.lives, boost: { ...(this.run.boost || {}) }, nextLife: this.run.nextLife };
     this.run.chaos = this.chaosMods();
     this.ui.hideAll();
@@ -106,12 +109,12 @@ class App {
 
   playCampaign(i, carry) {
     if (i >= CAMPAIGN.length) return this.playEndless(0, carry);
-    this.run = { mode: 'campaign', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || 3, boost: carry?.boost ? { ...carry.boost } : undefined, nextLife: carry?.nextLife };
+    this.run = { mode: 'campaign', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || (cheats.adrenaline ? 1 : 3), boost: carry?.boost ? { ...carry.boost } : undefined, nextLife: carry?.nextLife, cheated: carry?.cheated };
     this.startLevel(CAMPAIGN[i]);
   }
 
   playEndless(i = 0, carry) {
-    this.run = { mode: 'endless', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || 3, boost: carry?.boost ? { ...carry.boost } : undefined, nextLife: carry?.nextLife };
+    this.run = { mode: 'endless', levelIndex: i, score: carry?.score || 0, lives: carry?.lives || (cheats.adrenaline ? 1 : 3), boost: carry?.boost ? { ...carry.boost } : undefined, nextLife: carry?.nextLife, cheated: carry?.cheated };
     const lv = endlessLevel(i);
     lv.id = 'e' + i;
     lv.name = `∞ ${String(i + 1).padStart(2, '0')} · ${lv.name}`;
@@ -120,7 +123,7 @@ class App {
 
   playCustom(level) {
     this.customLevel = level;
-    this.run = { mode: 'custom', levelIndex: Math.round(level.opts.difficulty * 18), score: 0, lives: 3 };
+    this.run = { mode: 'custom', levelIndex: Math.round(level.opts.difficulty * 18), score: 0, lives: cheats.adrenaline ? 1 : 3 };
     this.startLevel(level);
   }
 
@@ -135,10 +138,10 @@ class App {
     if (this.run.mode === 'campaign' && !lv.bonus) {
       profile.maxLevel = Math.max(profile.maxLevel, Math.min(CAMPAIGN.length - 1, this.run.levelIndex + 1));
     }
-    profile.bestScore = Math.max(profile.bestScore, this.run.score);
+    this.updateBest();
     if (this.run.mode === 'campaign' || this.run.mode === 'endless') {
-      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex + 1, score: this.run.score, lives: this.run.lives, boost: { ...this.run.boost }, nextLife: this.run.nextLife };
-      if (this.run.mode === 'campaign' && this.run.levelIndex + 1 >= CAMPAIGN.length) profile.saved = { mode: 'endless', levelIndex: 0, score: this.run.score, lives: this.run.lives, boost: { ...this.run.boost }, nextLife: this.run.nextLife };
+      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex + 1, score: this.run.score, lives: this.run.lives, boost: { ...this.run.boost }, nextLife: this.run.nextLife, cheated: this.run.cheated };
+      if (this.run.mode === 'campaign' && this.run.levelIndex + 1 >= CAMPAIGN.length) profile.saved = { mode: 'endless', levelIndex: 0, score: this.run.score, lives: this.run.lives, boost: { ...this.run.boost }, nextLife: this.run.nextLife, cheated: this.run.cheated };
     }
     saveProfile();
     const rows = [
@@ -161,7 +164,7 @@ class App {
 
   nextLevel() {
     const r = this.run;
-    const carry = { score: r.score, lives: r.lives, boost: r.boost, nextLife: r.nextLife };
+    const carry = { score: r.score, lives: r.lives, boost: r.boost, nextLife: r.nextLife, cheated: r.cheated };
     if (r.mode === 'campaign') this.playCampaign(r.levelIndex + 1, carry);
     else if (r.mode === 'endless') this.playEndless(r.levelIndex + 1, carry);
     else {
@@ -176,15 +179,14 @@ class App {
 
   onGameOver(res) {
     if (this.run.demo) { this.startDemo(); return; }
-    const best = this.run.score > profile.bestScore;
-    profile.bestScore = Math.max(profile.bestScore, this.run.score);
+    const best = this.updateBest();
     if (this.run.mode === 'campaign' || this.run.mode === 'endless') profile.saved = null;
     saveProfile();
     this.mode = 'result';
     this.ui.setHud(false);
     this.ui.showGameOver([
       { k: 'СЧЁТ', v: fmt(this.run.score), cls: 'total' },
-      { k: 'РЕКОРД', v: best ? 'НОВЫЙ!' : fmt(profile.bestScore) },
+      { k: this.run.cheated ? 'РЕКОРД*' : 'РЕКОРД', v: best ? 'НОВЫЙ!' : fmt(this.run.cheated ? profile.bestCheat || 0 : profile.bestScore) },
       { k: 'УРОВЕНЬ', v: this.currentLevel.name },
       { k: 'КИРПИЧЕЙ', v: res.bricks },
     ]);
@@ -247,7 +249,7 @@ class App {
 
   quitToMenu() {
     if (this.mode === 'play' && (this.run.mode === 'campaign' || this.run.mode === 'endless') && !this.currentLevel.bonus) {
-      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex, score: this.levelStart.score, lives: this.levelStart.lives, boost: this.levelStart.boost, nextLife: this.levelStart.nextLife };
+      profile.saved = { mode: this.run.mode, levelIndex: this.run.levelIndex, score: this.levelStart.score, lives: this.levelStart.lives, boost: this.levelStart.boost, nextLife: this.levelStart.nextLife, cheated: this.run.cheated };
       saveProfile();
     }
     this.audio.stopMusic();
@@ -261,6 +263,24 @@ class App {
   }
 
   markRebuild() { this.needsRebuild = true; }
+
+  // Рекорды с читами хранятся отдельно (помечаются звёздочкой)
+  updateBest() {
+    const key = this.run.cheated ? 'bestCheat' : 'bestScore';
+    const best = this.run.score > (profile[key] || 0);
+    profile[key] = Math.max(profile[key] || 0, this.run.score);
+    return best;
+  }
+
+  // Чит «ТУРИСТ»: пропустить уровень из паузы
+  skipLevel() {
+    if (this.mode !== 'play' || !cheats.tourist) return;
+    this.run.cheated = true;
+    if (this.run.mode === 'campaign') profile.maxLevel = Math.max(profile.maxLevel, Math.min(CAMPAIGN.length - 1, this.run.levelIndex + 1));
+    saveProfile();
+    this.paused = false;
+    this.nextLevel();
+  }
 
   unlockChaos() {
     if (profile.chaosUnlocked) return;

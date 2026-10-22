@@ -54,6 +54,7 @@
       <span class="chip mono" id="h-weather">—</span>
       <span class="chip mono hidden" id="h-combo">×1</span>
       <span class="chip mono hidden" id="h-timer">35</span>
+      <span class="chip mono hidden" id="h-cheats"></span>
     </div>
     <div class="boss-bar hidden" id="h-boss">
       <div class="boss-name"><span id="h-boss-name">BOSS</span><span class="mono" id="h-boss-hp">100%</span></div>
@@ -93,7 +94,7 @@
     <nav class="menu-list" id="menu-list"></nav>
     <footer class="menu-foot mono">
       <span id="menu-ticker">ПЕРЕТАСКИВАЙ ПАЛЬЦЕМ · КОСНИСЬ, ЧТОБЫ ЗАПУСТИТЬ · ИЩИ НЕВИДИМЫЕ КИРПИЧИ</span>
-      <span class="ver">v1.4 · <span id="net-state">ONLINE</span></span>
+      <span class="ver">v1.5 · <span id="net-state">ONLINE</span></span>
     </footer>
   </section>
 
@@ -146,6 +147,25 @@
     </div>
   </section>
 
+  <!-- ——— ЧЁРНЫЙ ХОД ——— -->
+  <section id="backdoor" class="screen">
+    <div class="screen-head">
+      <button class="back" data-back>← НАЗАД</button>
+      <h2>ЧЁРНЫЙ ХОД</h2>
+      <span class="mono dim">ДЛЯ ЧИТЕРОВ И СЛАБАКОВ</span>
+    </div>
+    <div class="term">
+      <div class="term-log mono" id="bd-log"></div>
+      <form class="term-row" id="bd-form" autocomplete="off">
+        <span class="mono term-prompt">&gt;</span>
+        <input class="mono" id="bd-input" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="введите код" aria-label="Секретный код">
+        <button class="btn primary" type="submit">ВВОД</button>
+      </form>
+      <div class="term-active" id="bd-active"></div>
+      <div class="mono dim term-foot">Коды не раскрываются. Спрашивай у разработчика — или у того, кто уже прошёл игру. Рекорды с читами помечаются звёздочкой.</div>
+    </div>
+  </section>
+
   <!-- ——— КАК ИГРАТЬ ——— -->
   <section id="help" class="screen">
     <div class="screen-head">
@@ -164,7 +184,9 @@
       <div class="modal-actions">
         <button class="btn primary" data-act="resume">ПРОДОЛЖИТЬ</button>
         <button class="btn" data-act="restart">ЗАНОВО</button>
+        <button class="btn hidden" data-act="skip">ПРОПУСТИТЬ УРОВЕНЬ →</button>
         <button class="btn" data-act="settings">НАСТРОЙКИ</button>
+        <button class="btn ghost" data-act="backdoor">ЧЁРНЫЙ ХОД</button>
         <button class="btn ghost" data-act="quit">В МЕНЮ</button>
       </div>
     </div>

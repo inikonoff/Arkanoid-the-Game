@@ -295,6 +295,26 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 22px; background: var
 .seg-ctl button { flex: 1 0 auto; font-family: var(--mono); font-size: 11px; padding: 8px 8px; border: 1px solid var(--line); color: var(--dim); }
 .seg-ctl button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
+/* ——— Чёрный ход ——— */
+.term { max-width: 720px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.term-log { min-height: 180px; max-height: 42vh; overflow-y: auto; padding: 14px; background: #060706; border: 1px solid var(--line-2); font-size: 12px; line-height: 1.6; touch-action: pan-y; }
+.term-log .tl { white-space: pre-wrap; word-break: break-word; }
+.term-log .cmd { color: var(--ink); }
+.term-log .ok { color: #8dff9e; text-shadow: 0 0 8px rgba(141,255,158,0.35); }
+.term-log .bad { color: var(--bad); letter-spacing: 0.12em; }
+.term-log .dim { color: var(--dim); }
+.term-row { display: flex; gap: 6px; align-items: center; }
+.term-prompt { color: #8dff9e; font-size: 18px; width: 14px; }
+.term-row input { flex: 1; min-width: 0; height: 46px; padding: 0 12px; background: #060706; border: 1px solid var(--line-2); outline: none; font-size: 16px; color: #8dff9e; text-transform: uppercase; caret-color: #8dff9e; }
+.term-row input:focus { border-color: #8dff9e; }
+.term-row input::placeholder { color: var(--faint); text-transform: none; }
+.term-active { display: flex; flex-wrap: wrap; gap: 6px; }
+.term-active .ta-h { width: 100%; font-size: 10px; letter-spacing: 0.14em; }
+.term-foot { font-size: 10px; letter-spacing: 0.06em; line-height: 1.5; }
+.term.shake { animation: shake 0.35s; }
+@keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+#h-cheats { color: #8dff9e; border-color: rgba(141,255,158,0.5); }
+
 /* ——— Справка ——— */
 .help-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding-bottom: 20px; }
 .help-card { border: 1px solid var(--line); padding: 14px; }

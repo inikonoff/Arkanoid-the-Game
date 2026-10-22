@@ -449,6 +449,9 @@ export class Game {
     let s = this.baseSpeed * Math.min(1.22, 1 + this.levelTime / 300);
     if (this.effects.slow > 0) s *= 0.68;
     if (this.effects.fast > 0) s *= 1.3;
+    const ch = profile.cheats || {};
+    if (ch.turtle) s *= 0.7;
+    if (ch.adrenaline) s *= 1.25;
     return s * this.weather.speedMul;
   }
 
@@ -828,6 +831,7 @@ export class Game {
     if (b.secret) pts = 1000;
     this.addScore(pts, b.x, b.z);
     if (b.explosive) this.explosionQueue.push({ x: b.x, z: b.z, t: 0.08, power: 1 });
+    if (profile.cheats?.confetti) this.fx.confetti(b.x, b.z);
     if (b.secret) this.spawnPickup(b.x, b.z, 'star');
     else if (b.bonus) this.spawnPowerup(b.x, b.z);
     else if (Math.random() < (this.level.bonus ? 0.04 : 0.085)) this.spawnPowerup(b.x, b.z);
@@ -1180,6 +1184,7 @@ export class Game {
         if (k === 'field') this.shieldMesh.visible = this.shieldActive();
       }
     }
+    this.shieldMesh.visible = this.shieldActive();
     if (this.shieldMesh.visible) this.shieldMesh.material.opacity = 0.5 + Math.sin(this.time * 8) * 0.25;
     // авто-запуск после магнита
     if (this.catchT > 0 && this.balls.some((b) => b.stuck) && this.state === 'play') {
@@ -1271,7 +1276,7 @@ export class Game {
   }
 
   // ———————————————————————— Бустеры и снабжение ————————————————————————
-  shieldActive() { return this.shield > 0 || this.effects.field > 0; }
+  shieldActive() { return this.shield > 0 || this.effects.field > 0 || !!profile.cheats?.immortal; }
 
   activateBooster(id) {
     const B = BOOSTERS[id], boost = this.run.boost;
@@ -1335,6 +1340,7 @@ export class Game {
 
   // ———————————————————————— Счёт и состояние ————————————————————————
   addScore(n, x, z, quiet = false) {
+    if (profile.cheats?.adrenaline) n *= 2;
     const mul = 1 + Math.min(12, Math.floor(this.combo / 4)) * 0.25;
     const pts = Math.round(n * mul);
     this.run.score += pts;

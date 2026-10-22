@@ -318,6 +318,18 @@ export class FX {
     }
   }
 
+  // Фейерверк-конфетти (чит «КОНФЕТТИ»)
+  confetti(x, z) {
+    const c = this.tmpColor;
+    const n = Math.max(12, this.amount(70));
+    for (let i = 0; i < n; i++) {
+      c.setHSL(Math.random(), 0.9, 0.6);
+      const a = Math.random() * Math.PI * 2, s = 2 + Math.random() * 6;
+      this.sparks.emit(x, 0.6, z, Math.cos(a) * s, 6 + Math.random() * 8, Math.sin(a) * s, c, 0.22 + Math.random() * 0.2, 0.9 + Math.random() * 0.8, { drag: 1.2, gravity: 14 });
+    }
+    this.ring(x, z, 1.8, '#ffffff', 0.3);
+  }
+
   // Взрыв: огненный шар, обломки, ударная волна, вспышка, тряска
   explode(x, z, power = 1, color = '#ff7a2f') {
     const fire = [new THREE.Color('#fff3c4'), new THREE.Color('#ffb347'), new THREE.Color('#ff5a1f'), new THREE.Color('#c0261a')];
