@@ -5,6 +5,7 @@ import { CAMPAIGN } from './levels.js';
 import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts } from './generator.js';
 import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
 import { cheats, enterCode, TOGGLE_LABELS } from './cheats.js';
+import { SUPER_FX, CHAINS, CHAIN_NEED, BOOST_SUPER_LABEL } from './supers.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -428,6 +429,11 @@ export class UI {
       <div class="help-card"><h3>БОНУСЫ</h3><ul>${pu}</ul></div>
       <div class="help-card"><h3>БУСТЕРЫ</h3><ul>${Object.values(BOOSTERS).map((B) => `<li><i class="sw" style="background:${B.color}"></i><span><span class="tag">${B.key}</span><b>${B.label}</b> — ${B.desc}, ${B.dur} с.</span></li>`).join('')}
         <li><span class="tag">+</span><span>Кнопки справа или клавиши 1–4. В начале забега — по одному заряду, максимум ${BOOST_MAX}. Новые заряды: капсула «ЗАРЯД», каждая новая фаза босса.</span></li></ul></div>
+      <div class="help-card"><h3>СБОРКИ И СУПЕРЫ</h3><ul>
+        <li><span class="tag">×3</span><span>Поймай 3 одинаковых бонуса за 20 с — получишь супер-версию: ЛАЗЕР → Рельсотрон, ОГОНЬ → Инферно, ×3 → Рой, ЩИТ → Купол, ШИРЕ → Титан, БОМБА → Ядерка, МАГНИТ → Гравитрон, МЕДЛ. → Стоп-кадр, ЗАРЯД → Перезарядка. Прогресс видно в HUD (◆◆◇).</span></li>
+        <li><span class="tag">!</span><span>Ловушки «УЖЕ» и «БЫСТР.» сбрасывают все незавершённые сборки — уворачивайся.</span></li>
+        <li><span class="tag">3/3</span><span>Бустер с полным запасом светится «СУПЕР»: нажатие тратит все 3 заряда на усиленную версию — Купол, Минигун, Двойная броня (отражает выстрелы в босса), Прицел (показывает траекторию запуска).</span></li>
+      </ul></div>
       <div class="help-card"><h3>КЛАУСТРОФОБИЯ</h3><p>Стена блоков непрерывно надвигается на ракетку — не дай ей пересечь красную линию (прорыв стоит жизни). Поле узкое, на ракетке слабая автопушка. Каждые ~200 м — босс: он висит на месте, а блоки едут мимо. Победа взрывает весь экран бонусами, поле становится шире, локация меняется. Стали нет, самые крепкие блоки — 3 удара. Счёт — в метрах.</p></div>
       <div class="help-card"><h3>ЖИЗНИ И СНАБЖЕНИЕ</h3><p>+1 жизнь за каждого побеждённого босса и за каждые 30 000 очков (максимум 7). В бою с боссом оружие сбрасывается сверху каждые 11–16 секунд, даже когда поле пустое, а каждые 20% здоровья босса из него выпадает капсула.</p></div>
       <div class="help-card"><h3>ПОГОДА И ФИЗИКА</h3><ul>
@@ -500,6 +506,9 @@ export class UI {
           b.querySelector('.bn').textContent = n;
           b.classList.toggle('empty', n <= 0 && !active);
           b.classList.toggle('active', active);
+          const sup = n >= BOOST_MAX;
+          b.classList.toggle('super', sup);
+          b.querySelector('.bl').textContent = sup ? BOOST_SUPER_LABEL[id] : BOOSTERS[id].label;
         });
       }
       document.querySelectorAll('.boost.active').forEach((b) => {
@@ -510,17 +519,27 @@ export class UI {
     // эффекты (раз в 6 кадров — меньше аллокаций и работы с DOM)
     if ((c.effTick = (c.effTick || 0) + 1) % 6 !== 0) return;
     const effs = [];
-    for (const [k, t] of Object.entries(game.effects)) if (t > 0 && POWERUPS[k]?.dur) effs.push([k, t]);
+    for (const [k, t] of Object.entries(game.effects)) if (t > 0 && (POWERUPS[k]?.dur || SUPER_FX[k])) effs.push([k, t]);
     if (game.shield > 0) effs.push(['shield', game.effects.shield || 1, `ЩИТ ×${game.shield}`]);
     if (game.megaCharges > 0) effs.push(['mega', 1, `БОМБА ×${game.megaCharges}`]);
     const key = effs.map((e) => e[0] + (e[2] || '')).join();
     const box = $('#h-effects');
     if (c.effKey !== key) {
       c.effKey = key;
-      box.innerHTML = effs.map(([k, , label]) => `<span class="eff${POWERUPS[k].good ? '' : ' bad'}" data-k="${k}" style="--c:${POWERUPS[k].color}">${label || POWERUPS[k].label}<i></i></span>`).join('');
+      box.innerHTML = effs.map(([k, , label]) => {
+        const P = SUPER_FX[k] || POWERUPS[k];
+        return `<span class="eff${SUPER_FX[k] ? ' sup' : P.good ? '' : ' bad'}" data-k="${k}" style="--c:${P.color}">${label || P.label}<i></i></span>`;
+      }).join('');
+    }
+    // сборки «3 одинаковых → супер»
+    const chs = game.chainState ? game.chainState() : [];
+    const chKey = chs.map(([k, n]) => k + n).join();
+    if (c.chKey !== chKey) {
+      c.chKey = chKey;
+      $('#h-chains').innerHTML = chs.map(([k, n]) => `<span class="chain" style="--c:${POWERUPS[k].color}">${POWERUPS[k].label} <b>${'◆'.repeat(n)}${'◇'.repeat(CHAIN_NEED - n)}</b> → ${SUPER_FX[CHAINS[k]]?.label || (k === 'mega' ? 'ЯДЕРКА' : 'ПЕРЕЗАРЯДКА')}</span>`).join('');
     }
     box.querySelectorAll('.eff').forEach((e) => {
-      const k = e.dataset.k, d = POWERUPS[k].dur;
+      const k = e.dataset.k, d = (SUPER_FX[k] || POWERUPS[k]).dur;
       const t = game.effects[k] || 0;
       e.querySelector('i').style.transform = `scaleX(${d ? Math.max(0, t / d) : 1})`;
     });

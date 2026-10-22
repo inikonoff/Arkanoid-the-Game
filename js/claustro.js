@@ -95,7 +95,7 @@ export class Claustro {
     let k = gap > 10 ? 2.6 : gap > 7 ? 1.6 : gap < 1.5 ? 0.12 : gap < 3 ? 0.3 : gap < 5 ? 0.6 : 1;
     if (g.boss) k *= 0.7;
     if (g.state === 'ready') k *= 0.25;
-    if (this.burst.length || this.widenT > 0) k = 0;
+    if (this.burst.length || this.widenT > 0 || g.effects.stop > 0) k = 0;
     this.speed = base * k;
     const dz = this.speed * dt;
     if (dz > 0) {

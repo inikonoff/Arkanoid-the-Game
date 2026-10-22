@@ -215,6 +215,7 @@ function orbiterMesh(type, r) {
 }
 
 const PROJ_GEO = new THREE.SphereGeometry(0.28, 10, 8);
+const REFLECT_MAT = glow('#ffd166', 3);
 const PROJ_MAT = {
   bolt: glow('#ff5a3a', 2.4), seed: glow('#b6f03c', 2.2), lava: glow('#ff8a2a', 2.8), ink: glow('#c77dff', 2.2),
 };
@@ -435,8 +436,23 @@ export class Boss {
       q.mesh.position.set(q.x, 0.6, q.z);
       q.mesh.rotation.y += dt * 5;
       if (Math.random() < 0.6 * settings.particles) g.fx.sparks.emit(q.x, 0.6, q.z, 0, 0.5, 0, q.mesh.material.color, 0.35, 0.25, { grow: -0.5 });
-      let dead = q.life <= 0 || q.z > f.zBottom + 2 || Math.abs(q.x) > f.W / 2 + 1;
-      if (!dead && g.shieldActive() && q.z > f.shieldZ - 0.2) {
+      let dead = q.life <= 0 || q.z > f.zBottom + 2 || q.z < f.zTop - 2 || Math.abs(q.x) > f.W / 2 + 1;
+      // КУПОЛ / ДВОЙНАЯ БРОНЯ: снаряд отражается обратно в босса
+      const reflectAt = g.effects.dome > 0 ? f.shieldZ - 0.2 : g.effects.armor2 > 0 ? p.z - 0.55 : null;
+      if (q.reflected) {
+        if (!dead && Math.hypot(q.x - this.x, q.z - this.z) < this.r + 0.3) {
+          dead = true;
+          this.damage(1.5, q.x, q.z);
+          g.fx.sparksAt(q.x, 0.6, q.z, '#ffd166', 20, 6);
+        }
+      } else if (!dead && reflectAt !== null && q.z > reflectAt && (g.effects.dome > 0 || Math.abs(q.x - p.x) < p.halfW + 0.3)) {
+        const dx = this.x - q.x, dz = this.z - q.z, d = Math.hypot(dx, dz) || 1, sp = Math.hypot(q.vx, q.vz) * 1.4;
+        q.vx = (dx / d) * sp; q.vz = (dz / d) * sp;
+        q.reflected = true; q.life = 4;
+        q.mesh.material = REFLECT_MAT;
+        g.fx.sparksAt(q.x, 0.5, q.z, '#ffd166', 12, 4);
+        g.audio.metal();
+      } else if (!dead && g.shieldActive() && q.z > f.shieldZ - 0.2) {
         dead = true;
         g.fx.sparksAt(q.x, 0.4, q.z, '#9fe8ff', 12, 4);
       } else if (!dead && Math.abs(q.z - p.z) < 0.55 && Math.abs(q.x - p.x) < p.halfW + 0.2) {

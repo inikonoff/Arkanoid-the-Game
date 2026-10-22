@@ -12,6 +12,7 @@ import { powerupLabel } from './textures.js';
 import { vibrate } from './audio.js';
 import { BrickWorld, TOWER_B, TOWER_H } from './brickphys.js';
 import { Claustro } from './claustro.js';
+import { installSupers, superEffects, BOOST_SUPER } from './supers.js';
 
 export const CELL_W = 1.5;
 export const CELL_D = 0.75;
@@ -170,7 +171,12 @@ export class Game {
     this.powerups = [];
     this.lasers = [];
     this.pickups = [];
-    this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0 };
+    this.effects = { expand: 0, shrink: 0, laser: 0, catch: 0, slow: 0, fire: 0, fast: 0, field: 0, gun: 0, armor: 0, ...superEffects() };
+    this.chains = {};
+    this.beams = [];
+    this.burnQ = [];
+    this.sats = [];
+    this.aimLine = null;
     this.run.boost ||= defaultBoosts();
     this.lifeEvery = level.claustro ? 400000 : LIFE_EVERY;
     this.run.nextLife ||= Math.ceil((this.run.score + 1) / this.lifeEvery) * this.lifeEvery;
@@ -541,9 +547,10 @@ export class Game {
       this.updatePowerups(sdt);
       this.updateLasers(sdt);
       this.updateSupply(sdt);
+      this.updateSupers(sdt);
     }
     if (this.claustro) this.claustro.update(sdt);
-    if (this.boss && this.boss.alive) {
+    if (this.boss && this.boss.alive && !(this.effects.stop > 0)) {
       this.boss.update(sdt);
       this.bossPush(sdt);
     }
@@ -587,6 +594,7 @@ export class Game {
     if (p.x > lim) { p.x = lim; p.vx = 0; }
     // ширина
     let target = p.baseHalf * (1 + Math.min(2, this.expandLevel || 0) * 0.35) * (this.effects.shrink > 0 ? 0.65 : 1);
+    if (this.effects.titan > 0) target = this.field.W / 2 - 0.05; // ТИТАН: ракетка на всю ширину
     p.halfW += (target - p.halfW) * Math.min(1, dt * 8);
     this.layoutPaddle();
     p.squash = Math.max(0, p.squash - dt * 5);
@@ -652,6 +660,7 @@ export class Game {
         const a = 22 / (d2 + 4);
         b.vx += (dx / d) * a * h * 6; b.vz += (dz / d) * a * h * 6;
       }
+      if (this.effects.gravitron > 0) this.steerBall(b, h);
       // регулировка скорости: силы меняют направление, но не убивают темп
       let s = Math.hypot(b.vx, b.vz) || 1;
       let ns = s + (target - s) * Math.min(1, h * 1.2);
@@ -684,6 +693,7 @@ export class Game {
       if (b.vz > 0 && b.z + b.r > p.z - PADDLE_D && b.z - b.r < p.z + PADDLE_D * 0.5 && Math.abs(b.x - p.x) < p.halfW + b.r * 0.6) {
         this.paddleBounce(b);
       }
+      if (this.effects.swarm > 0 && this.sats.length) this.satelliteCollide(b);
       // потеря
       if (b.z > f.zBottom + 1.5) {
         this.loseBall(b);
@@ -841,6 +851,7 @@ export class Game {
     this.addScore(pts, b.x, b.z);
     if (b.explosive) this.explosionQueue.push({ x: b.x, z: b.z, t: 0.08, power: 1 });
     if (profile.cheats?.confetti) this.fx.confetti(b.x, b.z);
+    if (this.effects.inferno > 0 || b._burnGen !== undefined) this.igniteAround(b);
     if (b.secret) this.spawnPickup(b.x, b.z, 'star');
     else if (b.bonus) this.spawnPowerup(b.x, b.z);
     else if (Math.random() < (this.level.bonus ? 0.04 : 0.085)) this.spawnPowerup(b.x, b.z);
@@ -1236,6 +1247,7 @@ export class Game {
       case 'life': this.run.lives = Math.min(MAX_LIVES, this.run.lives + 1); break;
       case 'cell': this.grantCharge(); break;
     }
+    this.chainCollect(type);
   }
 
   updateTimers(dt) {
@@ -1284,7 +1296,7 @@ export class Game {
       }
     }
     // «Клаустрофобия»: слабая автопушка, когда нет лазера/пулемёта
-    if (this.claustro && this.state === 'play' && !(this.effects.laser > 0) && !(this.effects.gun > 0) && !this.won) {
+    if (this.claustro && this.state === 'play' && !(this.effects.laser > 0) && !(this.effects.gun > 0) && !(this.effects.minigun > 0) && !(this.effects.rail > 0) && !this.won) {
       this.cannonCd = (this.cannonCd ?? 0.5) - dt;
       if (this.cannonCd <= 0) {
         this.cannonCd = 0.4;
@@ -1294,7 +1306,22 @@ export class Game {
         this.lasers.push({ x: p.x, z: p.z - 0.5, m, gun: true, cannon: true });
       }
     }
-    if (this.effects.gun > 0 && this.state === 'play') {
+    if (this.effects.minigun > 0 && this.state === 'play') {
+      // МИНИГУН: три потока веером
+      this.minigunCd = (this.minigunCd || 0) - dt;
+      if (this.minigunCd <= 0) {
+        this.minigunCd = 0.07;
+        for (const a of [-0.2, 0, 0.2]) {
+          const m = new THREE.Mesh(geos().laser, this.gunMat || (this.gunMat = glow('#ffb02e', 3)));
+          m.position.set(p.x, 0.55, p.z - 0.5);
+          m.rotation.y = -a;
+          this.scene.add(m);
+          this.lasers.push({ x: p.x, z: p.z - 0.5, m, gun: true, vx: Math.sin(a) * 38, vz: Math.cos(a) * 38 });
+        }
+        if (Math.random() < 0.4) this.audio.laser();
+      }
+    }
+    if (this.effects.gun > 0 && !(this.effects.minigun > 0) && this.state === 'play') {
       this.gunCd -= dt;
       if (this.gunCd <= 0) {
         this.gunCd = 0.075;
@@ -1309,9 +1336,10 @@ export class Game {
     }
     for (let i = this.lasers.length - 1; i >= 0; i--) {
       const L = this.lasers[i];
-      L.z -= (L.gun ? 38 : 30) * dt;
-      L.m.position.z = L.z;
-      let dead = L.z < f.zTop;
+      L.x += (L.vx || 0) * dt;
+      L.z -= (L.vz ?? (L.gun ? 38 : 30)) * dt;
+      L.m.position.set(L.x, 0.55, L.z);
+      let dead = L.z < f.zTop || Math.abs(L.x) > f.W / 2;
       if (!dead) {
         const b = this.world.brickAt(L.x, L.z, 0.05);
         if (b) {
@@ -1354,12 +1382,18 @@ export class Game {
   }
 
   // ———————————————————————— Бустеры и снабжение ————————————————————————
-  shieldActive() { return this.shield > 0 || this.effects.field > 0 || !!profile.cheats?.immortal; }
+  shieldActive() { return this.shield > 0 || this.effects.field > 0 || this.effects.dome > 0 || !!profile.cheats?.immortal; }
 
   activateBooster(id) {
     const B = BOOSTERS[id], boost = this.run.boost;
     if (!B || !boost || this.run.demo || (this.state !== 'play' && this.state !== 'ready') || this.won) return false;
     if ((boost[id] || 0) <= 0) { this.audio.click(); return false; }
+    if (boost[id] >= BOOST_MAX) {
+      // полный запас — все три заряда уходят на супер-версию
+      boost[id] = 0;
+      this.triggerSuper(BOOST_SUPER[id]);
+      return true;
+    }
     boost[id]--;
     switch (id) {
       case 'field': this.effects.field = B.dur; this.shieldMesh.visible = true; break;
@@ -1580,6 +1614,7 @@ export class Game {
   dispose() {
     if (!this.scene) return;
     this.claustro?.dispose();
+    this.disposeSupers?.();
     this.weather?.dispose();
     this.env?.dispose();
     this.boss?.dispose();
@@ -1611,3 +1646,5 @@ const _s3 = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _tgt = new THREE.Vector3();
 export { BOSSES };
+
+installSupers(Game);
