@@ -1,5 +1,5 @@
 // Service worker: офлайн-кэш всех ресурсов игры + кэш шрифтов Google.
-const VERSION = 'kinetic-v1.8.0';
+const VERSION = 'kinetic-v1.8.1';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './js/main.js', './js/settings.js', './js/renderer.js', './js/audio.js', './js/ui.js', './js/game.js',

@@ -5,6 +5,8 @@ import { BOOSTERS, BOOST_MAX } from './game.js';
 
 profile.cheats ||= {};
 profile.cheatsOwned ||= []; // коды, полученные трофеями за боссов
+// ВСЕДВЕРИ убран в v1.8.1 — выбор локаций и так есть
+profile.cheatsOwned = profile.cheatsOwned.filter((c) => c !== 'ВСЕДВЕРИ');
 export const cheats = profile.cheats;
 
 // Переключатели, которые влияют на игру (рекорд с ними помечается звёздочкой)
@@ -21,16 +23,6 @@ function norm(s) {
 }
 
 const CODES = [
-  {
-    names: ['ВСЕДВЕРИ', 'VSEDVERI'],
-    reward: true,
-    desc: 'Все уровни кампании открыты',
-    run(app) {
-      profile.maxLevel = CAMPAIGN.length - 1;
-      saveProfile();
-      return 'Все 24 уровня кампании открыты.';
-    },
-  },
   {
     names: ['БЕССМЕРТИЕ', 'BESSMERTIE'],
     reward: true,
@@ -169,3 +161,5 @@ export function grantCode(id) {
 export function ownedCodes() {
   return CODES.filter((c) => c.reward && profile.cheatsOwned.includes(c.names[0])).map((c) => ({ id: c.names[0], desc: c.desc }));
 }
+
+export const TOTAL_CODES = CODES.filter((c) => c.reward).length;

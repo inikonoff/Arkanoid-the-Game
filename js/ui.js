@@ -4,7 +4,7 @@ import { LOCATIONS, WEATHER_INFO } from './locations.js';
 import { CAMPAIGN } from './levels.js';
 import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts } from './generator.js';
 import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
-import { cheats, enterCode, TOGGLE_LABELS, ownedCodes } from './cheats.js';
+import { cheats, enterCode, TOGGLE_LABELS, ownedCodes, TOTAL_CODES } from './cheats.js';
 import { SUPER_FX, CHAINS, CHAIN_NEED, BOOST_SUPER_LABEL } from './supers.js';
 
 const $ = (s) => document.querySelector(s);
@@ -429,7 +429,7 @@ export class UI {
     for (const t of pend) box.appendChild(el('span', 'chipbtn', t));
     // полученные коды — ввод касанием
     const own = ownedCodes();
-    const h = el('div', 'mono dim ta-h', own.length ? `ТВОИ КОДЫ · ${own.length}/10 · КОСНИСЬ, ЧТОБЫ ВВЕСТИ` : 'КОДОВ ПОКА НЕТ · ПОБЕЖДАЙ БОССОВ — КАЖДЫЙ ДАЁТ ТРОФЕЙ');
+    const h = el('div', 'mono dim ta-h', own.length ? `ТВОИ КОДЫ · ${own.length}/${TOTAL_CODES} · КОСНИСЬ, ЧТОБЫ ВВЕСТИ` : 'КОДОВ ПОКА НЕТ · ПОБЕЖДАЙ БОССОВ — КАЖДЫЙ ДАЁТ ТРОФЕЙ');
     box.appendChild(h);
     for (const o of own) {
       const b = el('button', 'chipbtn', o.id);
