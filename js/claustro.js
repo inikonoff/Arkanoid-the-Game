@@ -186,7 +186,7 @@ export class Claustro {
       const { b } = this.burst.shift();
       if (!b.alive) continue;
       g.destroyBrick(b, {});
-      if (Math.random() < 0.3 && g.powerups.length < 8) g.spawnPowerup(b.x, b.z, Math.random() < 0.3 ? 'cell' : undefined);
+      if (Math.random() < 0.12) g.spawnPowerup(b.x, b.z, Math.random() < 0.3 ? 'cell' : undefined);
       if (++n % 3 === 0) g.fx.explode(b.x, b.z, 0.45, b.color);
     }
   }

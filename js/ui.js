@@ -528,7 +528,7 @@ export class UI {
       $('#h-lives').innerHTML = Array.from({ length: Math.max(3, Math.min(9, v)) }, (_, i) => `<i class="${i < v ? '' : 'off'}"></i>`).join('');
     });
     set('weather', game.weather.hud, (v) => { $('#h-weather').textContent = `${WEATHER_INFO[game.weather.type]?.label || ''} · ${v}`; });
-    const mul = 1 + Math.min(12, Math.floor(game.combo / 4)) * 0.25;
+    const mul = game.comboMul();
     set('combo', mul, (v) => { const e = $('#h-combo'); e.classList.toggle('hidden', v <= 1); e.textContent = `КОМБО ×${v.toFixed(2)}`; });
     set('timer', game.bonusTimer > 0 ? Math.ceil(game.bonusTimer) : 0, (v) => { const e = $('#h-timer'); e.classList.toggle('hidden', !v); e.textContent = `БОНУС · ${v} С`; });
     const ch = Object.keys(TOGGLE_LABELS).filter((k) => cheats[k] && k !== 'tourist').map((k) => TOGGLE_LABELS[k]).join(' · ');

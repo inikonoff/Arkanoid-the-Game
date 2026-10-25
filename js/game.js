@@ -97,6 +97,18 @@ function geos() {
 }
 
 const LABELS = {};
+// Геометрия и материалы капсул общие (раньше создавались на каждую капсулу и не освобождались)
+const CAPSULES = {};
+let CAP_GEO = null;
+function capsuleRes(type) {
+  CAP_GEO ||= { body: new THREE.CylinderGeometry(0.3, 0.3, 1.0, 20, 1, true), cap: new THREE.SphereGeometry(0.3, 12, 8) };
+  if (!CAPSULES[type]) {
+    const P = POWERUPS[type];
+    CAPSULES[type] = { bodyMat: new THREE.MeshBasicMaterial({ map: label(type) }), capMat: glow(P.color, 1.6) };
+    CAPSULES[type].bodyMat.userData.shared = CAPSULES[type].capMat.userData.shared = true;
+  }
+  return { bodyGeo: CAP_GEO.body, capGeo: CAP_GEO.cap, ...CAPSULES[type] };
+}
 function label(type) {
   if (!LABELS[type]) {
     const p = POWERUPS[type];
@@ -443,7 +455,7 @@ export class Game {
 
   // ———————————————————————— Шары ————————————————————————
   newBall(stuck = false, from = null) {
-    if (this.balls.length >= MAX_BALLS) return null;
+    if (this.balls.length >= (this.claustro ? 10 : MAX_BALLS)) return null;
     const r = BALL_R * Math.pow(this.field.scale, 0.5) * (this.chaos.ball || 1);
     const mesh = new THREE.Mesh(geos().ball, this.ballMat);
     mesh.scale.setScalar(r);
@@ -860,7 +872,7 @@ export class Game {
     if (this.effects.inferno > 0 || b._burnGen !== undefined) this.igniteAround(b);
     if (b.secret) this.spawnPickup(b.x, b.z, 'star');
     else if (b.bonus) this.spawnPowerup(b.x, b.z);
-    else if (Math.random() < (this.level.bonus ? 0.04 : 0.085)) this.spawnPowerup(b.x, b.z);
+    else if (Math.random() < (this.claustro ? 0.03 : this.level.bonus ? 0.04 : 0.085)) this.spawnPowerup(b.x, b.z);
     if (b.regen) b.regenT = 9;
     this.checkClear();
   }
@@ -1120,12 +1132,13 @@ export class Game {
       for (const [k, p] of pool) { r -= p.w; if (r <= 0) { type = k; break; } }
       type = type || 'expand';
     }
-    const P = POWERUPS[type];
+    // предел одновременно падающих капсул: лишнее превращается в очки
+    if (this.powerups.length >= (this.claustro ? 5 : 8)) { this.addScore(100, x, z, true); return; }
+    const R = capsuleRes(type);
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.0, 20, 1, true), new THREE.MeshBasicMaterial({ map: label(type) }));
+    const body = new THREE.Mesh(R.bodyGeo, R.bodyMat);
     body.rotation.z = Math.PI / 2;
-    const capMat = glow(P.color, 1.6);
-    const capGeo = new THREE.SphereGeometry(0.3, 12, 8);
+    const capMat = R.capMat, capGeo = R.capGeo;
     const c1 = new THREE.Mesh(capGeo, capMat); c1.position.x = -0.5;
     const c2 = new THREE.Mesh(capGeo, capMat); c2.position.x = 0.5;
     g.add(body, c1, c2);
@@ -1170,7 +1183,7 @@ export class Game {
       if (Math.random() < 0.5) this.fx.sparks.emit(o.x, 0.7, o.z, (Math.random() - 0.5), 1, (Math.random() - 0.5), _c.set('#e0c3ff'), 0.2, 0.6);
       if (catchIt(o)) {
         this.collectStar(o.x, o.z);
-        this.scene.remove(o.g);
+        this.scene.remove(o.g); o.g.geometry.dispose(); o.g.material.dispose();
         this.pickups.splice(i, 1);
       } else if (o.z > f.zBottom + 2) {
         this.scene.remove(o.g);
@@ -1478,9 +1491,12 @@ export class Game {
   }
 
   // ———————————————————————— Счёт и состояние ————————————————————————
+  // множитель комбо: до ×4, в «Клаустрофобии» до ×2 (там комбо копятся бесконечно)
+  comboMul() { return 1 + Math.min(this.claustro ? 4 : 12, Math.floor(this.combo / 4)) * 0.25; }
+
   addScore(n, x, z, quiet = false) {
     if (profile.cheats?.adrenaline) n *= 2;
-    const mul = 1 + Math.min(12, Math.floor(this.combo / 4)) * 0.25;
+    const mul = this.comboMul();
     const pts = Math.round(n * mul);
     this.run.score += pts;
     if (this.run.score >= this.run.nextLife && !this.run.demo) {
@@ -1646,10 +1662,11 @@ export class Game {
     this.env?.dispose();
     this.boss?.dispose();
     this.scene.traverse((o) => {
-      if (o.geometry && o.geometry !== GEO_CACHE?.brick && o.geometry !== GEO_CACHE?.tower && o.geometry !== GEO_CACHE?.ball && o.geometry !== GEO_CACHE?.laser) o.geometry.dispose();
+      if (o.geometry && o.geometry !== GEO_CACHE?.brick && o.geometry !== GEO_CACHE?.tower && o.geometry !== CAP_GEO?.body && o.geometry !== CAP_GEO?.cap && o.geometry !== GEO_CACHE?.ball && o.geometry !== GEO_CACHE?.laser) o.geometry.dispose();
       if (o.material) {
         const ms = Array.isArray(o.material) ? o.material : [o.material];
         ms.forEach((m) => {
+          if (m.userData.shared) return;
           for (const k of ['map', 'emissiveMap']) if (m[k] && !m[k].userData.keep) m[k].dispose();
           if (m.uniforms?.map?.value && !m.uniforms.map.value.userData.keep) m.uniforms.map.value.dispose();
           m.dispose();

@@ -482,6 +482,7 @@ export class Boss {
           if (o.hp <= 0) {
             o.alive = false;
             this.game.scene.remove(o.mesh);
+            o.mesh.traverse((m) => { m.geometry?.dispose(); m.material?.dispose(); });
             this.game.fx.explode(o.x, o.z, 0.8, { hydra: '#3e8a35', wyrm: '#bfe9ff' }[this.type] || '#8a7a70');
             if (this.type === 'wyrm') { this.game.fx.shatter(o.x, o.z, '#cdeeff', 'glass'); this.game.audio.glass(); }
             this.game.audio.explosion(0.8);
@@ -528,7 +529,7 @@ export class Boss {
     g.fx.debris.spawn(x, 0.8, z, '#888', g.fx.debrisAmount(6), { speed: 5, up: 5, size: 0.18 });
     g.fx.shake(0.12);
     g.audio.bossHit();
-    g.addScore(250, x, z);
+    g.addScore(Math.max(10, Math.round(250 * Math.min(1, n))), x, z, n < 1); // очки пропорциональны урону
     if (this.hp <= 0) this.die();
   }
 
@@ -564,6 +565,10 @@ export class Boss {
     const s = this.game.scene;
     s.remove(this.group);
     for (const o of this.orbiters) s.remove(o.mesh);
+    // модель и орбитали — личные ресурсы босса (снаряды общие, их не трогаем)
+    const free = (root) => root.traverse((m) => { m.geometry?.dispose(); if (m.material && !m.material.userData?.shared) m.material.dispose(); });
+    free(this.group);
+    for (const o of this.orbiters) free(o.mesh);
     for (const q of this.projectiles) s.remove(q.mesh);
     if (this.beam) s.remove(this.beam.m);
     this.projectiles.length = 0;
