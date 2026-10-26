@@ -1,4 +1,4 @@
-// Кампания: 8 локаций × 3 уровня, каждый третий — босс.
+// Кампания: 8 локаций × 4 уровня: два классических, уровень-раскладка (кладка/кольца/стопки) и босс.
 // Легенда:
 //  .  пусто          1 2 3  обычный кирпич (прочность)
 //  A  броня (5)      #  сталь (неразрушимая)
@@ -8,8 +8,11 @@
 //  P  портал (пары)  $  золото
 //  T  башня — высокая, опрокидывается от сильного удара (домино)
 import { LOCATIONS } from './locations.js';
+import { profile, saveProfile } from './settings.js';
 
 const L = (name, grid, extra = {}) => ({ name, grid, ...extra });
+// уровень со свободной раскладкой (кладка, кольца, стопки) — строится детерминированно по имени
+const LL = (name, layout) => ({ name, grid: [], layout: { ...layout, seed: name } });
 
 const CAMPAIGN_RAW = [
   // ——— ПУСТЫНЯ ———
@@ -33,6 +36,7 @@ const CAMPAIGN_RAW = [
     '#.11111111.#',
     '#T..I..I..T#',
   ]),
+  LL('Стена Сахеля', { type: 'masonry', bond: 'running', cols: 12, rows: 7, diff: 0.35 }),
   L('Скарабей-Колосс', [
     '............',
     '............',
@@ -63,6 +67,7 @@ const CAMPAIGN_RAW = [
     'GGGGGGGGGGGGG',
     '.R.R.R.R.R.R.',
   ]),
+  LL('Ступени храма', { type: 'stacks', shape: 'pyramid', cols: 12, rows: 5, max: 3, diff: 0.4 }),
   L('Тотем-Гидра', [
     '............',
     '............',
@@ -93,6 +98,7 @@ const CAMPAIGN_RAW = [
     '.2222222222.',
     '#1111..1111#',
   ]),
+  LL('Ледяная мишень', { type: 'rings', pattern: 'target', rings: 3, cols: 12, diff: 0.45 }),
   L('Крио-Змей', [
     '............',
     '............',
@@ -123,6 +129,7 @@ const CAMPAIGN_RAW = [
     '....AAAA....',
     '.R..R..R..R.',
   ]),
+  LL('Застывшая лава', { type: 'masonry', bond: 'rubble', cols: 12, rows: 8, diff: 0.6 }),
   L('Магма-Ядро', [
     '............',
     '............',
@@ -152,6 +159,7 @@ const CAMPAIGN_RAW = [
     '.GGGGGGGGGG.',
     '..I..II..I..',
   ]),
+  LL('Водоворот', { type: 'rings', pattern: 'spiral', rings: 3, cols: 12, rotate: 0.35, diff: 0.55 }),
   L('Кракен Бездны', [
     '............',
     '............',
@@ -182,6 +190,7 @@ const CAMPAIGN_RAW = [
     '.G..G..G..G.',
     'RRRRR..RRRRR',
   ]),
+  LL('Небоскрёбы', { type: 'stacks', shape: 'skyline', cols: 12, rows: 5, max: 4, diff: 0.6 }),
   L('Мех-Страж', [
     '............',
     '............',
@@ -213,6 +222,7 @@ const CAMPAIGN_RAW = [
     '.....GG.....',
     '..R.R..R.R..',
   ]),
+  LL('Орбиты', { type: 'rings', pattern: 'gear', rings: 3, cols: 14, rotate: 0.5, diff: 0.7 }),
   L('Материнский Корабль', [
     '............',
     '............',
@@ -244,6 +254,7 @@ const CAMPAIGN_RAW = [
     '$..222222..$',
     'T..I.II.I..T',
   ]),
+  LL('Шестерни времени', { type: 'rings', pattern: 'flower', rings: 4, cols: 14, rotate: 0.65, diff: 0.8 }),
   L('Сингулярность', [
     '............',
     '............',
@@ -255,11 +266,23 @@ const CAMPAIGN_RAW = [
   ], { boss: 'singularity' }),
 ];
 
+export const LEVELS_PER_LOC = 4;
+
 export const CAMPAIGN = CAMPAIGN_RAW.map((lv, i) => ({
   ...lv,
   id: 'c' + i,
   index: i,
-  location: Math.floor(i / 3) % LOCATIONS.length,
+  location: Math.floor(i / LEVELS_PER_LOC) % LOCATIONS.length,
 }));
 
-export const BOSS_EVERY = 3;
+export const BOSS_EVERY = 4;
+
+// Миграция прогресса со старой кампании (3 уровня на локацию) на новую (4 уровня)
+function remapOld(i) { const loc = Math.floor(i / 3), p = i % 3; return loc * 4 + (p === 2 ? 3 : p); }
+if (!profile.levelsV2) {
+  profile.levelsV2 = true;
+  if (profile.maxLevel) profile.maxLevel = Math.min(CAMPAIGN.length - 1, remapOld(profile.maxLevel));
+  if (profile.stars) profile.stars = profile.stars.map((id) => (/^c\d+$/.test(id) ? 'c' + remapOld(+id.slice(1)) : id));
+  if (profile.saved?.mode === 'campaign') profile.saved.levelIndex = remapOld(profile.saved.levelIndex);
+  saveProfile();
+}

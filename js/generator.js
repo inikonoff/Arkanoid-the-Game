@@ -32,6 +32,9 @@ export const GEN_MODES = [
   { id: 'chaos', name: 'Хаос', desc: 'Шумовые кластеры и цепные взрывы.' },
   { id: 'giant', name: 'Гигант', desc: 'Лоскутное одеяло из сотен кирпичей.' },
   { id: 'insane', name: 'Безумие', desc: 'Три шара, порталы, регенерация, скорость.' },
+  { id: 'masonry', name: 'Кладка', desc: 'Кирпичи разной длины с перевязкой: ложковая, английская, дикая.' },
+  { id: 'rings', name: 'Кольца', desc: 'Кольца вокруг золотого ядра; на высокой сложности — вращаются.' },
+  { id: 'stacks', name: 'Башни', desc: 'Стопки блоков в высоту — оседают по блоку при каждом выбитом.' },
 ];
 
 export const GEN_SIZES = [
@@ -263,6 +266,20 @@ export function generateLevel(opts = {}) {
     boss: !!opts.boss,
   };
   const R = rng(`${o.seed}|${o.mode}|${o.size}|${o.density}|${o.difficulty}|${o.symmetry}`);
+  // свободные раскладки (кладка / кольца / башни) — без сетки и без босса
+  if (o.mode === 'masonry' || o.mode === 'rings' || o.mode === 'stacks') {
+    const sz = GEN_SIZES.find((s) => s.id === o.size) || GEN_SIZES[1];
+    const cols = Math.max(8, Math.min(sz.cols, 34));
+    let spec;
+    if (o.mode === 'masonry') spec = { type: 'masonry', bond: R.pick(['running', 'english', 'rubble']), cols, rows: Math.max(5, Math.min(Math.round(sz.rows * (0.6 + o.density * 0.5)), 26)), diff: o.difficulty };
+    else if (o.mode === 'rings') spec = { type: 'rings', pattern: R.pick(['target', 'flower', 'spiral', 'gear']), rings: Math.max(2, Math.min(7, Math.round(cols / 5))), cols, rotate: o.difficulty >= 0.45 ? 0.2 + o.difficulty * 0.55 : 0, diff: o.difficulty };
+    else spec = { type: 'stacks', shape: R.pick(['pyramid', 'skyline', 'castle', 'wall']), cols, rows: Math.max(4, Math.min(Math.round(sz.rows * 0.6), 18)), max: 2 + Math.round(o.difficulty * 2 + o.density), diff: o.difficulty };
+    const loc = o.location >= 0 ? o.location : R.int(0, LOCATIONS.length - 1);
+    return {
+      name: `${R.pick(ADJ)} ${R.pick(NOUN)}`, grid: [], layout: { ...spec, seed: o.seed + o.mode + o.size + o.difficulty + o.density },
+      location: loc, generated: true, seed: o.seed, opts: o, boss: null, mods: { speedMul: 0.9 + o.difficulty * 0.25 },
+    };
+  }
   const sz = GEN_SIZES.find((s) => s.id === o.size) || GEN_SIZES[1];
   let cols = sz.cols, rows = sz.rows;
   if (o.mode === 'giant' && sz.cols < 24) { cols = 24; rows = 18; }

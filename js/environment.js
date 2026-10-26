@@ -251,8 +251,12 @@ export class Environment {
     map.repeat.set(W / 6, floorD / 6);
     const em = floorEmissive(L.accent);
     em.repeat.set(W / 6, floorD / 6);
+    // яркость поля: тянем тёмный пол локации к светлому тёплому серому с оттенком акцента
+    const fl = Math.max(0, Math.min(1, settings.floorLight ?? 0.45));
+    const light = new THREE.Color('#8f8a80').lerp(new THREE.Color(L.accent), 0.14);
+    const floorCol = new THREE.Color(L.floor).lerp(light, fl);
     const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 0.6, 0.6, floorD),
-      mat({ color: L.floor, map, roughness: 0.38, metalness: 0.55, emissive: '#ffffff', emissiveMap: em, emissiveIntensity: 0.6 }));
+      mat({ color: floorCol, map, roughness: 0.38 + 0.27 * fl, metalness: 0.55 - 0.4 * fl, emissive: '#ffffff', emissiveMap: em, emissiveIntensity: 0.6 - 0.3 * fl }));
     floor.position.set(0, -0.3, cz + 1.5);
     floor.receiveShadow = settings.shadows > 0;
     this.group.add(floor);

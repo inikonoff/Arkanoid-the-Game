@@ -72,7 +72,9 @@ export class BrickWorld {
     b.a = b.a || 0;
     b.vx = 0; b.vz = 0; b.w = 0;
     b.homeX = b.x; b.homeZ = b.z;
-    const m = b.steel ? 0 : (MASS_BY_TYPE[b.ch] ?? MASS[b.cat]);
+    let m = b.steel ? 0 : (MASS_BY_TYPE[b.ch] ?? MASS[b.cat]);
+    // блоки свободной раскладки: масса пропорциональна площади
+    if (m && !b.tower && b.sw) m *= Math.max(0.35, (b.sw * (b.sd || BRICK_D)) / (BRICK_W * BRICK_D));
     b.mass = m;
     b.inv = m ? 1 / m : 0;
     if (b.tower) {
@@ -81,7 +83,7 @@ export class BrickWorld {
       this.setDims(b, TOWER_B / 2, TOWER_B / 2);
     } else {
       b.h = BRICK_H;
-      this.setDims(b, HW, HD);
+      this.setDims(b, (b.sw || BRICK_W) / 2, (b.sd || BRICK_D) / 2);
     }
     b.sleepT = 0;
     b.asleep = true;
@@ -186,8 +188,17 @@ export class BrickWorld {
     return true;
   }
 
+  // Отрыв блока от вращающегося кольца: становится свободным телом со скоростью кольца
+  detach(b) {
+    if (!b.ringAttached) return;
+    b.ringAttached = false;
+    b.inv = b.inv0; b.invI = b.invI0;
+    this.wake(b);
+  }
+
   // Импульс в точке (px, pz)
   impulse(b, jx, jz, px, pz) {
+    this.detach(b);
     if (!b.inv) return;
     b.vx += jx * b.inv;
     b.vz += jz * b.inv;
@@ -198,6 +209,7 @@ export class BrickWorld {
 
   // Удар шара: возвращает величину импульса
   hitByBall(b, ballMass, rvx, rvz, nx, nz, px, pz) {
+    this.detach(b);
     const rx = px - b.x, rz = pz - b.z;
     const vpx = b.vx - b.w * rz, vpz = b.vz + b.w * rx;
     const vn = (rvx - vpx) * nx + (rvz - vpz) * nz; // относительная нормальная скорость (<0 — сближение)
@@ -314,6 +326,7 @@ export class BrickWorld {
     for (const b of list) {
       const dx = b.x - x, dz = b.z - z, d = Math.hypot(dx, dz) || 0.01;
       if (d > radius) continue;
+      this.detach(b);
       if (b.tower && !b.fallen) this.tip(b, (dx / d) * strength * 2.2 * (1 - d / radius) * b.mass, (dz / d) * strength * 2.2 * (1 - d / radius) * b.mass, 1.2);
       if (!b.inv) continue;
       const k = strength * (1 - d / radius) * b.mass;

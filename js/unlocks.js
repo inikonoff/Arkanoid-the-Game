@@ -6,16 +6,16 @@ import { profile, saveProfile } from './settings.js';
 export const UNLOCK_AT = {
   expand: 0, multi: 0, shrink: 0,
   laser: 1,
-  shield: 2,
-  slow: 3, fast: 3,
-  catch: 4,
-  life: 5,
-  fire: 6,
-  mega: 8,
-  gravity: 9,
-  cell: 11,
+  shield: 3,        // 1-й босс
+  slow: 4, fast: 4,
+  catch: 5,
+  life: 7,          // 2-й босс
+  fire: 8,
+  mega: 11,         // 3-й босс
+  gravity: 12,
+  cell: 15,         // 4-й босс
 };
-export const CHAINS_AT = 12; // сборки «3 одинаковых → супер»
+export const CHAINS_AT = 16; // сборки «3 одинаковых → супер»
 
 // в «Клаустрофобии» узкий старт без этого слишком жёсткий
 const CLAUSTRO_ALWAYS = ['laser', 'shield'];

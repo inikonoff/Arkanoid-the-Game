@@ -148,6 +148,26 @@ export function dotTexture() {
   return t;
 }
 
+// Пятно копоти от взрыва: тёмный центр, рваный край, лучи-брызги
+export function scorchTexture() {
+  const [c, g] = canvas(128, 128);
+  const n2 = makeNoise(7);
+  const img = g.createImageData(128, 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+    const dx = x / 64 - 1, dy = y / 64 - 1, d = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const ray = Math.max(0, Math.sin(ang * 7 + fbm(n2, x / 30, y / 30) * 6)) ** 6 * 0.35;
+    const edge = 0.62 + fbm(n2, x / 14, y / 14) * 0.38 + ray;
+    const a = Math.max(0, Math.min(1, (edge - d) * 3.2)) * (0.65 + fbm(n2, x / 9 + 9, y / 9) * 0.45);
+    const i = (y * 128 + x) * 4;
+    const v = 18 + Math.min(1, d * 1.4) * 34;
+    img.data[i] = v + 6; img.data[i + 1] = v + 2; img.data[i + 2] = v;
+    img.data[i + 3] = Math.min(255, a * 255);
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
 export function smokeTexture() {
   const [c, g] = canvas(128, 128);
   const n2 = makeNoise(99);

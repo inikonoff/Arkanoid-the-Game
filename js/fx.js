@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 import { mat } from './mat.js';
-import { dotTexture, smokeTexture } from './textures.js';
+import { dotTexture, smokeTexture, scorchTexture } from './textures.js';
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -258,6 +258,21 @@ export class FX {
       }
     }
     this.lightIdx = 0;
+    // следы взрывов на полу: остаются до конца уровня, старые вытесняются по кругу
+    this.decals = null;
+    if (settings.decals) {
+      const n = 48;
+      const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+      const m = new THREE.MeshBasicMaterial({ map: scorchTexture(), transparent: true, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const mesh = new THREE.InstancedMesh(geo, m, n);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let i = 0; i < n; i++) mesh.setMatrixAt(i, ZERO);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 1;
+      scene.add(mesh);
+      this.decals = { mesh, n, i: 0 };
+    }
     this.trauma = 0;
     this.shakeOffset = new THREE.Vector3();
     this.tmpColor = new THREE.Color();
@@ -330,6 +345,17 @@ export class FX {
     this.ring(x, z, 1.8, '#ffffff', 0.3);
   }
 
+  decal(x, z, size = 1.5) {
+    const D = this.decals;
+    if (!D) return;
+    const s = Math.min(5, size) * (0.85 + Math.random() * 0.3);
+    _e.set(0, Math.random() * Math.PI * 2, 0);
+    _m.compose(_p.set(x, 0.015 + (D.i % 8) * 0.0008, z), _q.setFromEuler(_e), _s.set(s, 1, s));
+    D.mesh.setMatrixAt(D.i, _m);
+    D.mesh.instanceMatrix.needsUpdate = true;
+    D.i = (D.i + 1) % D.n;
+  }
+
   // Взрыв: огненный шар, обломки, ударная волна, вспышка, тряска
   explode(x, z, power = 1, color = '#ff7a2f') {
     const fire = [new THREE.Color('#fff3c4'), new THREE.Color('#ffb347'), new THREE.Color('#ff5a1f'), new THREE.Color('#c0261a')];
@@ -349,6 +375,7 @@ export class FX {
     this.debris.spawn(x, 0.4, z, color, this.debrisAmount(22 * power), { speed: 9 * power, up: 8 * power, size: 0.22, life: 4, sx: 1.2, sz: 1.2 });
     this.debris.spawn(x, 0.4, z, '#2b2622', this.debrisAmount(10 * power), { speed: 7 * power, up: 9, size: 0.16, life: 3 });
     this.debris.impulse(x, z, 5 * power, 14 * power);
+    this.decal(x, z, 1.4 + 1.3 * power);
     this.ring(x, z, 4.5 * power, '#ffb070', 0.45);
     this.flash(x, 2.5, z, '#ff9a4a', 60 * power, 0.4);
     this.shake(0.35 * power);

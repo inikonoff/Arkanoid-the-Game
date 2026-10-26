@@ -1,8 +1,9 @@
 // Интерфейс: меню, экраны, HUD, настройки, генератор, всплывашки.
 import { settings, setSetting, applyPreset, resetSettings, profile, saveProfile, REBUILD_KEYS, RESTART_KEYS } from './settings.js';
 import { LOCATIONS, WEATHER_INFO } from './locations.js';
-import { CAMPAIGN } from './levels.js';
-import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts } from './generator.js';
+import { CAMPAIGN, LEVELS_PER_LOC } from './levels.js';
+import { GEN_MODES, GEN_SIZES, SYMMETRY, generateLevel, encodeOpts, decodeOpts, rng } from './generator.js';
+import { buildLayout } from './layouts.js';
 import { POWERUPS, BOOSTERS, BOOST_MAX } from './game.js';
 import { cheats, enterCode, TOGGLE_LABELS, ownedCodes, TOTAL_CODES } from './cheats.js';
 import { SUPER_FX, CHAINS, CHAIN_NEED, BOOST_SUPER_LABEL } from './supers.js';
@@ -38,6 +39,8 @@ const SET_SCHEMA = [
       { key: 'weatherFx', type: 'range', perf: 'more', label: 'Плотность погоды', req: 1, min: 0, max: 1, step: 0.05, f: (v) => Math.round(v * 100) + '%', hint: 'Только визуал — физика погоды работает всегда.' },
       { key: 'envDetail', type: 'seg', perf: 'more', label: 'Детали окружения', req: 1, options: [[0, 'ВЫКЛ'], [1, 'МАЛО'], [2, 'МНОГО']], hint: 'Деревья, здания, астероиды вокруг поля.' },
       { key: 'dynLights', type: 'toggle', perf: 'on', label: 'Динамический свет взрывов', req: 1 },
+      { key: 'decals', type: 'toggle', perf: ['Почти бесплатно', 'можно оставить'], label: 'Следы взрывов на полу', req: 1, hint: 'Копоть от взрывов остаётся на поле до конца уровня (последние 48).' },
+      { key: 'floorLight', type: 'range', perf: ['Только вид', 'на скорость не влияет'], label: 'Яркость поля', req: 1, min: 0, max: 1, step: 0.05, f: (v) => (v ? Math.round(v * 100) + '%' : 'ТЁМНОЕ'), hint: '0 — исходный тёмный пол локации, больше — светлее и контрастнее к блокам.' },
       { key: 'trail', type: 'range', perf: ['Почти бесплатно', 'можно оставить'], label: 'Шлейф шара', min: 0, max: 1, step: 0.1, f: (v) => (v ? Math.round(v * 100) + '%' : 'ВЫКЛ') },
       { key: 'physicsRate', type: 'seg', perf: ['Выше — точнее отскоки', 'ниже — меньше нагрузка на процессор'], label: 'Частота физики', options: [[60, '60 Гц'], [120, '120 Гц'], [240, '240 Гц']], hint: 'Выше — точнее столкновения, но дороже для CPU.' },
       { key: 'showFps', type: 'toggle', label: 'Показывать FPS' },
@@ -147,7 +150,7 @@ export class UI {
       const loc = LOCATIONS[(lv ? lv.location : Math.floor(saved.levelIndex / 3)) % LOCATIONS.length];
       items.push({ lbl: 'Продолжить', meta: `LV ${String(saved.levelIndex + 1).padStart(2, '0')} · ${loc.tag}`, act: () => this.app.continueGame(), primary: true });
     }
-    items.push({ lbl: 'Новая игра', meta: '24 УРОВНЯ', act: () => this.app.newGame(), primary: !saved });
+    items.push({ lbl: 'Новая игра', meta: `${CAMPAIGN.length} УРОВНЯ`, act: () => this.app.newGame(), primary: !saved });
     items.push({ lbl: 'Локации', meta: `${Math.min(CAMPAIGN.length, profile.maxLevel + 1)}/${CAMPAIGN.length}`, act: () => this.show('levels') });
     items.push({ lbl: 'Генератор', meta: '∞ УРОВНЕЙ', act: () => this.show('generator') });
     items.push({ lbl: 'Бесконечный', meta: 'ВЫЖИВАНИЕ', act: () => this.app.playEndless() });
@@ -173,7 +176,7 @@ export class UI {
     g.innerHTML = '';
     $('#levels-meta').textContent = `ОТКРЫТО ${Math.min(CAMPAIGN.length, profile.maxLevel + 1)}/${CAMPAIGN.length}`;
     LOCATIONS.forEach((loc, li) => {
-      const first = li * 3;
+      const first = li * LEVELS_PER_LOC;
       const locked = first > profile.maxLevel;
       const card = el('div', 'loc-card' + (locked ? ' locked' : ''));
       card.style.setProperty('--c', loc.accent);
@@ -183,9 +186,9 @@ export class UI {
         <div class="lc-sub">${loc.name} — ${loc.desc}</div>
         <div class="swatch">${loc.bricks.map((c) => `<i style="background:${c}"></i>`).join('')}</div>`;
       const row = el('div', 'lv-row');
-      for (let k = 0; k < 3; k++) {
+      for (let k = 0; k < LEVELS_PER_LOC; k++) {
         const idx = first + k, lv = CAMPAIGN[idx];
-        const b = el('button', 'lv-btn' + (lv.boss ? ' boss' : ''), `${String(idx + 1).padStart(2, '0')}<small>${lv.boss ? 'БОСС' : 'УРОВЕНЬ'}</small>${profile.stars.includes(lv.id) ? '<span class="star">◆</span>' : ''}`);
+        const b = el('button', 'lv-btn' + (lv.boss ? ' boss' : ''), `${String(idx + 1).padStart(2, '0')}<small>${lv.boss ? 'БОСС' : lv.layout ? { masonry: 'КЛАДКА', rings: 'КОЛЬЦА', stacks: 'БАШНИ' }[lv.layout.type] : 'УРОВЕНЬ'}</small>${profile.stars.includes(lv.id) ? '<span class="star">◆</span>' : ''}`);
         b.disabled = idx > profile.maxLevel;
         b.title = lv.name;
         b.addEventListener('click', () => { this.app.audio.unlock(); this.app.playCampaign(idx); });
@@ -269,6 +272,7 @@ export class UI {
     g.strokeStyle = 'rgba(236,232,223,0.06)'; g.lineWidth = 1;
     for (let x = 0; x < W; x += 20) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); }
     for (let y = 0; y < H; y += 20) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); g.stroke(); }
+    if (lv.layout) { this.drawLayoutPreview(lv, g, W, H, loc); $('#gen-code').value = encodeOpts(this.genOpts); return; }
     const rows = lv.grid.length, cols = Math.max(...lv.grid.map((r) => r.length));
     const totalRows = rows + Math.max(6, rows * 0.6);
     const cw = Math.min((W - 24) / cols, (H - 30) / totalRows * 2);
@@ -297,6 +301,39 @@ export class UI {
     g.fillRect(W / 2 - cw * 1.2, py, cw * 2.4, Math.max(3, ch * 0.6));
     $('#gen-meta').innerHTML = `<span>${lv.name.toUpperCase()}</span><span>${cols}×${rows} · ${count} БЛОКОВ · ${loc.tag}</span>`;
     $('#gen-code').value = encodeOpts(this.genOpts);
+  }
+
+  // превью свободной раскладки: повёрнутые прямоугольники, высота стопок — яркостью и цифрой
+  drawLayoutPreview(lv, g, W, H, loc) {
+    const L = buildLayout(lv.layout, rng(String(lv.layout.seed)));
+    const FW = L.cols * 1.5, FD = L.rows * 0.75 + Math.max(6, L.rows * 0.75 * 0.6);
+    const k = Math.min((W - 24) / FW, (H - 30) / FD);
+    const ox = (W - FW * k) / 2, oy = 12;
+    const special = { A: '#8d99ae', $: '#e2b44c', X: '#ff3d1f', G: 'rgba(191,233,255,0.6)', '?': '#ffffff' };
+    for (const r of L.rings) {
+      g.strokeStyle = r.omega ? 'rgba(124,255,178,0.35)' : 'rgba(236,232,223,0.12)';
+      g.setLineDash(r.omega ? [4, 4] : []);
+      g.beginPath(); g.arc(ox + r.cx * k, oy + r.cz * k, r.r * k, 0, Math.PI * 2); g.stroke();
+    }
+    g.setLineDash([]);
+    let count = 0;
+    for (const it of L.free) {
+      const n = it.stack || 1;
+      count += n;
+      g.save();
+      g.translate(ox + it.x * k, oy + it.z * k);
+      g.rotate(it.a || 0);
+      g.fillStyle = special[it.ch] || loc.bricks[Math.round(it.z / 0.75) % loc.bricks.length];
+      g.globalAlpha = n > 1 ? 0.55 + 0.11 * n : 0.85;
+      g.fillRect(-it.w * k / 2, -it.d * k / 2, it.w * k, it.d * k);
+      g.globalAlpha = 1;
+      if (n > 1 && k > 8) { g.fillStyle = '#0b0b0a'; g.font = `700 ${Math.round(k * 0.45)}px monospace`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n), 0, 1); }
+      g.restore();
+    }
+    g.fillStyle = loc.accent;
+    g.fillRect(W / 2 - 1.7 * k, Math.min(H - 14, oy + FD * k), 3.4 * k, Math.max(3, 0.3 * k));
+    const kind = { masonry: 'КЛАДКА', rings: L.rings.some((r) => r.omega) ? 'КОЛЬЦА ⟳' : 'КОЛЬЦА', stacks: 'БАШНИ' }[lv.layout.type];
+    $('#gen-meta').innerHTML = `<span>${lv.name.toUpperCase()}</span><span>${kind} · БЛОКОВ: ${count} · ${loc.tag}</span>`;
   }
 
   // ——— Настройки ———
@@ -487,12 +524,18 @@ export class UI {
         <li><span class="tag">!</span><span>Ловушки «УЖЕ» и «БЫСТР.» сбрасывают все незавершённые сборки — уворачивайся.</span></li>
         <li><span class="tag">3/3</span><span>Бустер с полным запасом светится «СУПЕР»: нажатие тратит все 3 заряда на усиленную версию — Купол, Минигун, Двойная броня (отражает выстрелы в босса), Прицел (показывает траекторию запуска).</span></li>
       </ul></div>
+      <div class="help-card"><h3>ОСОБЫЕ РАСКЛАДКИ</h3><ul>
+        <li><span class="tag">▤</span><span><b>Кладка</b> — кирпичи разной длины со смещёнными швами, как настоящая стена: ложковая, английская и дикая перевязка.</span></li>
+        <li><span class="tag">◎</span><span><b>Кольца</b> — блоки по окружностям вокруг золотого ядра. На поздних уровнях кольца вращаются в разные стороны; сбитый с кольца блок срывается и летит свободно.</span></li>
+        <li><span class="tag">▥</span><span><b>Башни</b> — стопки из нескольких блоков в высоту. Разбил нижний — вся стопка оседает на блок вниз. Цифра в превью генератора — высота стопки.</span></li>
+        <li><span class="tag">⚙</span><span>Третий уровень каждой локации в кампании — особая раскладка. В генераторе — режимы «Кладка», «Кольца», «Башни».</span></li>
+      </ul></div>
       <div class="help-card"><h3>КЛАУСТРОФОБИЯ</h3><p>Стена блоков непрерывно надвигается на ракетку — не дай ей пересечь красную линию (прорыв стоит жизни). Поле узкое, на ракетке слабая автопушка. Каждые ~200 м — босс: он висит на месте, а блоки едут мимо. Победа взрывает весь экран бонусами, поле становится шире, локация меняется. Стали нет, самые крепкие блоки — 3 удара. Счёт — в метрах.</p></div>
       <div class="help-card"><h3>ЖИЗНИ И СНАБЖЕНИЕ</h3><p>+1 жизнь за каждого побеждённого босса и за каждые 30 000 очков (максимум 7). В бою с боссом оружие сбрасывается сверху каждые 11–16 секунд, даже когда поле пустое, а каждые 20% здоровья босса из него выпадает капсула.</p></div>
       <div class="help-card"><h3>ПОГОДА И ФИЗИКА</h3><ul>
         ${LOCATIONS.map((l) => `<li><i class="sw" style="background:${l.accent}"></i><span><b>${l.tag}</b> — ${l.desc}</span></li>`).join('')}
       </ul></div>
-      <div class="help-card"><h3>БОССЫ</h3><p>Каждый третий уровень — босс со щитами, фазами и своими атаками. Попадания по ракетке оглушают её, лучи замораживают, чернила кракена закрывают обзор. В ярости босс призывает подкрепление.</p></div>
+      <div class="help-card"><h3>БОССЫ</h3><p>Каждый четвёртый уровень — босс со щитами, фазами и своими атаками. Попадания по ракетке оглушают её, лучи замораживают, чернила кракена закрывают обзор. В ярости босс призывает подкрепление.</p></div>
       <div class="help-card"><h3>СЕКРЕТЫ</h3><p>В некоторых уровнях спрятаны невидимые кирпичи с кристаллами — их выдают редкие искры. Поймай кристалл ракеткой, и откроются варп-врата в бонус-уровень. Говорят, логотип скрывает ещё кое-что… А для тех, кому совсем тяжело, в меню есть «Чёрный ход»: каждый побеждённый босс дарит на выбор один из трёх секретных кодов.</p></div>`;
   }
 

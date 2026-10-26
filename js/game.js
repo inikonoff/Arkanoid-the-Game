@@ -14,6 +14,8 @@ import { BrickWorld, TOWER_B, TOWER_H } from './brickphys.js';
 import { Claustro } from './claustro.js';
 import { installSupers, superEffects, BOOST_SUPER } from './supers.js';
 import { allowedSet, chainsAllowed } from './unlocks.js';
+import { buildLayout } from './layouts.js';
+import { rng } from './generator.js';
 
 export const CELL_W = 1.5;
 export const CELL_D = 0.75;
@@ -158,8 +160,9 @@ export class Game {
     this.claustro = null;
     this.freeBricks = { std: [], metal: [], glass: [], glow: [], tower: [] };
 
-    // сетка
-    let grid = level.grid.slice();
+    // сетка (или свободная раскладка: кладка, кольца, стопки)
+    this.layoutData = level.layout ? buildLayout(level.layout, rng(String(level.layout.seed ?? level.name))) : null;
+    let grid = this.layoutData ? Array(this.layoutData.rows).fill('.'.repeat(this.layoutData.cols)) : level.grid.slice();
     if (level.boss) grid = ['', '', ...grid];
     const cols = Math.max(...grid.map((r) => r.length));
     const rows = grid.length;
@@ -209,7 +212,7 @@ export class Game {
     this.megaMat = glow('#ff2e88', 2.6);
 
     if (level.boss) {
-      const tier = run.mode === 'endless' ? 8 + Math.floor((run.levelIndex || 0) / 3) : Math.floor((run.levelIndex || 0) / 3);
+      const tier = run.mode === 'endless' ? 8 + Math.floor((run.levelIndex || 0) / 3) : Math.floor((run.levelIndex || 0) / 4);
       this.boss = new Boss(this, level.boss, tier);
     }
 
@@ -237,6 +240,7 @@ export class Game {
     const f = this.field, pal = this.loc.bricks;
     this.brickList = [];
     this.portals = [];
+    this.rings = [];
     const counts = this.level.claustro
       ? { std: 420, metal: 140, glass: 90, glow: 130, tower: 50 }
       : { std: 40, metal: 4, glass: 4, glow: 4, tower: 0 };
@@ -261,6 +265,7 @@ export class Game {
         counts[b.cat]++;
       }
     });
+    if (this.layoutData) this.makeFreeBricks(this.layoutData, counts);
     // порталы парами
     for (let k = 0; k + 1 < portalCells.length; k += 2) {
       const a = portalCells[k], bb = portalCells[k + 1];
@@ -291,7 +296,14 @@ export class Game {
     }
     const f2 = this.field;
     this.world = new BrickWorld({ minX: -f2.W / 2, maxX: f2.W / 2, minZ: f2.zTop, maxZ: f2.paddleZ - (this.level.claustro ? 0.4 : 3) });
-    for (const b of this.brickList) this.world.add(b);
+    for (const b of this.brickList) if (!b.stacked) this.world.add(b);
+    for (const b of this.brickList) {
+      if (b.stacked) continue;
+      if (b.above) this.stackMass(b);
+      // блоки вращающихся колец — кинематические, пока их не выбьют
+      if (b.ring !== undefined && this.rings[b.ring]?.omega) { b.ringAttached = true; b.inv0 = b.inv; b.invI0 = b.invI; b.inv = 0; b.invI = 0; }
+    }
+    this.dropping = new Set();
     for (const b of this.brickList) this.assignInstance(b);
     this.wobbling = new Set();
     this.explosionQueue = [];
@@ -318,13 +330,122 @@ export class Game {
     if (b.tower) {
       this.writeTower(b, m, s);
     } else {
-      _o.position.set(b.x, BRICK_H / 2 + b.wy, b.z);
-      _o.rotation.set(b.wrx, -b.a, b.wrz);
-      _o.scale.set(s, s, s);
+      let y = BRICK_H / 2 + b.wy + (b.dropY || 0), px = b.x, pz = b.z, pa = b.a;
+      if (b.stacked) {
+        // блок в стопке стоит на нижнем
+        let base = b, lvl = 0;
+        while (base.below) { base = base.below; lvl++; }
+        y = BRICK_H / 2 + lvl * BRICK_H + base.wy + (base.dropY || 0) + (b.dropY || 0);
+        px = base.x + b.jx; pz = base.z + b.jz; pa = base.a + b.ja;
+      }
+      _o.position.set(px, y, pz);
+      _o.rotation.set(b.wrx, -pa, b.wrz);
+      _o.scale.set(s * (b.sw || BRICK_W) / BRICK_W, s, s * (b.sd || BRICK_D) / BRICK_D);
       _o.updateMatrix();
       m.setMatrixAt(b.inst, _o.matrix);
+      if (!b.stacked) for (let u = b.above; u; u = u.above) if (u.alive) this.writeBrick(u);
     }
     m.instanceMatrix.needsUpdate = true;
+  }
+
+  // ——— Свободная раскладка ———
+  makeFreeBricks(L, counts) {
+    const f = this.field, pal = this.loc.bricks;
+    this.rings = L.rings.map((r) => ({ cx: f.ox + r.cx, cz: f.brickTop + r.cz, r: r.r, omega: r.omega, phase: 0 }));
+    for (const it of L.free) {
+      const n = it.stack || 1;
+      let below = null;
+      const row = Math.round(it.z / CELL_D);
+      for (let k = 0; k < n; k++) {
+        const ch = TYPE[it.ch] && !TYPE[it.ch].steel ? it.ch : '1';
+        const t = TYPE[ch];
+        const b = {
+          i: -1, c: 0, r: row, ch, x: f.ox + it.x, z: f.brickTop + it.z, a: it.a || 0, sw: it.w, sd: it.d,
+          hp: t.hp, maxHp: t.hp, cat: t.cat, steel: false, explosive: !!t.explosive, bonus: !!t.bonus,
+          secret: false, hidden: false, regen: !!t.regen, gold: !!t.gold, tower: false, alive: true,
+          color: new THREE.Color(t.color || pal[(row + k) % pal.length]),
+          wy: 0, wvy: 0, wrx: 0, wvrx: 0, wrz: 0, wvrz: 0, appear: 1, regenT: 0,
+          stacked: k > 0, below, above: null,
+          jx: k ? (Math.random() - 0.5) * 0.06 : 0, jz: k ? (Math.random() - 0.5) * 0.04 : 0, ja: k ? (Math.random() - 0.5) * 0.08 : 0,
+        };
+        if (below) below.above = b;
+        if (it.ring !== undefined) { b.ring = it.ring; b.theta = it.theta; b.ringR = L.rings[it.ring].r + (it.rOff || 0); b.aOff = (it.a || 0) - it.theta; }
+        b.base = b.color.clone();
+        this.brickList.push(b);
+        counts[b.cat]++;
+        below = b;
+      }
+    }
+  }
+
+  // нижний блок стопки несёт вес верхних
+  stackMass(b) {
+    let n = 1;
+    for (let u = b.above; u; u = u.above) n++;
+    if (n > 1 && b.mass) { b.mass *= n; b.inv = 1 / b.mass; this.world.setDims(b, b.hw, b.hd); }
+  }
+
+  // Блок выбит из стопки: верхние оседают на этаж ниже
+  unlinkStack(b) {
+    if (b.stacked) {
+      if (b.below) b.below.above = b.above;
+      if (b.above) { b.above.below = b.below; b.above.dropY = (b.above.dropY || 0) + BRICK_H; this.dropping.add(b.above); }
+    } else if (b.above) {
+      const u = b.above;
+      u.below = null; u.stacked = false;
+      u.x = b.x + u.jx; u.z = b.z + u.jz; u.a = b.a + u.ja;
+      u.jx = u.jz = u.ja = 0;
+      u.dropY = (u.dropY || 0) + BRICK_H;
+      this.world.add(u);
+      this.stackMass(u);
+      this.dropping.add(u);
+    }
+    b.above = b.below = null;
+    b.stacked = false;
+  }
+
+  stackBase(b) { while (b.below) b = b.below; return b; }
+
+  updateDropping(dt) {
+    for (const d of this.dropping) {
+      d.dropV = (d.dropV || 0) + 30 * dt;
+      d.dropY -= d.dropV * dt;
+      if (d.dropY <= 0) {
+        d.dropY = 0; d.dropV = 0;
+        this.dropping.delete(d);
+        const base = this.stackBase(d);
+        if (!d.stacked) {
+          this.fx.smoke.emit(d.x, 0.15, d.z, 0, 0.6, 0, _c.set('#8a847a'), 0.9, 0.6, { grow: 1.4, alpha: 0.35 });
+          this.audio.thud?.();
+        }
+        base.wvy -= 1.2; this.wobbling.add(base);
+      }
+      this.writeBrick(this.stackBase(d));
+    }
+  }
+
+  // Вращающиеся кольца: блоки едут по окружности, пока их не выбьют
+  updateRings(dt) {
+    if (!this.rings?.length || this.effects.stop > 0) return;
+    let any = false;
+    for (const R of this.rings) if (R.omega) { R.phase += R.omega * dt; any = true; }
+    if (!any) return;
+    const W = this.world;
+    this.ringTick = (this.ringTick || 0) + 1;
+    for (const b of this.brickList) {
+      if (!b.alive || !b.ringAttached) continue;
+      const R = this.rings[b.ring];
+      const th = b.theta + R.phase, r = b.ringR;
+      const c = Math.cos(th), s = Math.sin(th);
+      b.x = R.cx + c * r; b.z = R.cz + s * r; b.a = th + b.aOff;
+      b.vx = -R.omega * r * s; b.vz = R.omega * r * c; b.w = R.omega;
+      W.rehash(b);
+      W.moved.add(b);
+      // будим лежащие на пути свободные блоки, чтобы кольцо их расталкивало
+      if (this.ringTick % 6 === 0) {
+        for (const o of W.query(b.x, b.z, 0.3, W.tmp3)) if (o !== b && o.inv && o.asleep && W.circle(o, b.x, b.z, b.hw, _ct)) W.wake(o);
+      }
+    }
   }
 
   // Башня: стоит, качается вокруг ребра основания (3D-наклон) или лежит бревном
@@ -577,6 +698,8 @@ export class Game {
       this.world.moved.clear();
     }
     if (this.world.landed.length) this.onTowersLanded();
+    this.updateRings(sdt);
+    if (this.dropping?.size) this.updateDropping(sdt);
     this.weather.update(sdt);
     this.updateExplosions(sdt);
     this.updateBricks(sdt);
@@ -850,6 +973,10 @@ export class Game {
   destroyBrick(b, src = {}) {
     b.alive = false;
     this.world.remove(b);
+    const lvl = b.stacked ? (() => { let n = 0, q = b; while (q.below) { q = q.below; n++; } return n; })() : 0;
+    const sx = b.stacked ? this.stackBase(b).x + b.jx : b.x, sz = b.stacked ? this.stackBase(b).z + b.jz : b.z;
+    if (b.above || b.stacked) this.unlinkStack(b);
+    if (lvl) { b.x = sx; b.z = sz; }
     this.freeBrick(b);
     this.writeBrick(b);
     this.remaining--;
@@ -857,7 +984,7 @@ export class Game {
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     const kind = b.cat === 'glass' ? 'glass' : b.cat === 'metal' ? 'metal' : 'std';
-    this.fx.shatter(b.x, b.z, b.color, kind, src.nx || 0, src.nz || 0, b.tower && !b.fallen ? TOWER_H : b.h || BRICK_H, b.tower && b.fallen ? TOWER_H : 1.2);
+    this.fx.shatter(b.x, b.z, b.color, kind, src.nx || 0, src.nz || 0, b.tower && !b.fallen ? TOWER_H : (lvl + 1) * BRICK_H, b.tower && b.fallen ? TOWER_H : (b.sw || 1.2));
     if (kind === 'glass') this.audio.glass(); else this.audio.brick(b.maxHp, this.combo);
     vibrate(kind === 'metal' ? 14 : 6);
     // волна по соседям: визуальный подскок + реальный толчок
@@ -896,6 +1023,7 @@ export class Game {
       ch, c: 0, r: rowN, x, z, a: 0, hp, maxHp: hp, cat, steel: false, explosive: !!t.explosive, bonus: !!t.bonus,
       secret: false, hidden: false, revealed: false, regen: false, gold: !!t.gold, tower: !!t.tower, alive: true,
       wy: 0, wvy: 0, wrx: 0, wvrx: 0, wrz: 0, wvrz: 0, appear: 0.05, regenT: 0,
+      sw: undefined, sd: undefined, above: null, below: null, stacked: false, ring: undefined, ringAttached: false, dropY: 0,
     });
     b.color.set(t.color || this.loc.bricks[rowN % this.loc.bricks.length]);
     b.base.copy(b.color);
@@ -1000,7 +1128,9 @@ export class Game {
   solidTop = (x, z) => {
     const b = this.world.brickAt(x, z);
     if (!b || (b.hidden && !b.revealed) || (b.tower && b.tilt > 0 && !b.fallen)) return 0;
-    return b.h + b.wy * 0.3;
+    let n = 1;
+    for (let u = b.above; u; u = u.above) n++;
+    return b.h * n + b.wy * 0.3;
   };
 
   updateExplosions(dt) {
@@ -1067,6 +1197,7 @@ export class Game {
       this.fx.sparksAt(b.x, 0.8, b.z, '#d8e4ff', 40, 8, { size: 0.2 });
       this.fx.ring(b.x, b.z, 2.5, '#c8d6ff', 0.3);
       this.fx.shake(0.25);
+      this.fx.decal(b.x, b.z, 1.1);
       this.damageBrick(b, 99, {});
       this.pushNeighbors(b.x, b.z, 3, 2);
     } else {
@@ -1096,6 +1227,7 @@ export class Game {
       if (b) {
         b.c = c; b.r = r; b.x = x; b.z = z; b.a = 0; b.ch = '1'; b.hp = b.maxHp = 1; b.hidden = false; b.secret = false;
         b.explosive = false; b.bonus = false; b.gold = false;
+        b.sw = b.sd = undefined; b.above = b.below = null; b.stacked = false; b.ring = undefined; b.ringAttached = false; b.dropY = 0;
         b.color.set(this.loc.bricks[r % this.loc.bricks.length]); b.base.copy(b.color);
         this.brickMeshes.std.setColorAt(b.inst, b.color);
         this.brickMeshes.std.instanceColor.needsUpdate = true;
